@@ -4,8 +4,13 @@ from typing import Any
 
 import httpx
 
-from modelpilot.providers.base import Provider, ProviderError
-from modelpilot.schemas import ChatCompletionPayload, ChatCompletionRequest
+from modelpilot.providers.base import (
+    InvalidProviderResponse,
+    Provider,
+    ProviderOutcome,
+    normalize_token_usage,
+)
+from modelpilot.schemas import ChatCompletionRequest
 
 
 class GeminiProvider(Provider):
@@ -21,7 +26,7 @@ class GeminiProvider(Provider):
         self.base_url = base_url.rstrip("/")
         self.client = client
 
-    async def complete(self, request: ChatCompletionRequest, model: str) -> ChatCompletionPayload:
+    async def complete(self, request: ChatCompletionRequest, model: str) -> ProviderOutcome:
         contents: list[dict[str, Any]] = []
         system_parts: list[dict[str, str]] = []
         for message in request.messages:
@@ -42,6 +47,8 @@ class GeminiProvider(Provider):
         if generation_config:
             payload["generationConfig"] = generation_config
 
+        started_at, monotonic_started_at = self.start_call()
+        response: httpx.Response | None = None
         try:
             response = await self.client.post(
                 f"{self.base_url}/models/{model}:generateContent",
@@ -51,25 +58,58 @@ class GeminiProvider(Provider):
             response.raise_for_status()
             data = response.json()
             text = data["candidates"][0]["content"]["parts"][0]["text"]
-        except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
-            raise ProviderError(f"gemini request failed: {exc}") from exc
+            if not isinstance(text, str):
+                raise InvalidProviderResponse("candidate text must be a string")
+            usage = _gemini_usage(data.get("usageMetadata"))
+            input_tokens, output_tokens, total_tokens = normalize_token_usage(usage)
+            normalized_response = {
+                "id": f"chatcmpl-{uuid.uuid4().hex}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": text},
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+            if usage is not None:
+                normalized_response["usage"] = usage
+            return self.successful_outcome(
+                model=model,
+                response=normalized_response,
+                started_at=started_at,
+                monotonic_started_at=monotonic_started_at,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                total_tokens=total_tokens,
+                status_code=response.status_code,
+            )
+        except Exception as exc:
+            return self.failed_outcome(
+                model=model,
+                error=exc,
+                started_at=started_at,
+                monotonic_started_at=monotonic_started_at,
+                status_code=response.status_code if response is not None else None,
+            )
 
-        usage = data.get("usageMetadata", {})
-        return {
-            "id": f"chatcmpl-{uuid.uuid4().hex}",
-            "object": "chat.completion",
-            "created": int(time.time()),
-            "model": model,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {"role": "assistant", "content": text},
-                    "finish_reason": "stop",
-                }
-            ],
-            "usage": {
-                "prompt_tokens": usage.get("promptTokenCount", 0),
-                "completion_tokens": usage.get("candidatesTokenCount", 0),
-                "total_tokens": usage.get("totalTokenCount", 0),
-            },
-        }
+
+def _gemini_usage(usage: Any) -> dict[str, int] | None:
+    if usage is None:
+        return None
+    if not isinstance(usage, dict):
+        raise InvalidProviderResponse("usageMetadata must be an object when present")
+    field_names = {
+        "promptTokenCount": "prompt_tokens",
+        "candidatesTokenCount": "completion_tokens",
+        "totalTokenCount": "total_tokens",
+    }
+    normalized = {
+        target: usage[source]
+        for source, target in field_names.items()
+        if source in usage and usage[source] is not None
+    }
+    return normalized or None

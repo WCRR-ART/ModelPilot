@@ -3,7 +3,8 @@ from time import perf_counter
 from uuid import uuid4
 
 from modelpilot.logging import RequestLogStore
-from modelpilot.providers import ProviderError
+from modelpilot.providers import ProviderError, ProviderOutcome
+from modelpilot.providers.base import sanitize_error_message
 from modelpilot.router import ModelRouter
 from modelpilot.schemas import AttemptLog, ChatCompletionPayload, ChatCompletionRequest, RequestLog
 
@@ -34,7 +35,7 @@ class GatewayService:
         for item in ranked:
             attempt_started = perf_counter()
             try:
-                result = await item.provider.complete(request, item.candidate.model)
+                provider_result = await item.provider.complete(request, item.candidate.model)
             except ProviderError as exc:
                 attempts.append(
                     AttemptLog(
@@ -43,17 +44,39 @@ class GatewayService:
                         score=item.score,
                         latency_ms=round((perf_counter() - attempt_started) * 1000, 2),
                         success=False,
-                        error=str(exc),
+                        error=sanitize_error_message(str(exc)),
                     )
                 )
                 continue
+
+            if isinstance(provider_result, ProviderOutcome):
+                if not provider_result.success:
+                    attempts.append(
+                        AttemptLog(
+                            provider=item.candidate.provider,
+                            model=item.candidate.model,
+                            score=item.score,
+                            latency_ms=round(provider_result.latency_ms, 2),
+                            success=False,
+                            error=provider_result.error_message,
+                        )
+                    )
+                    continue
+                result = provider_result.response
+                if result is None:
+                    raise RuntimeError("successful provider outcome did not contain a response")
+                attempt_latency_ms = provider_result.latency_ms
+            else:
+                # Preserve compatibility for third-party V0.1 Provider implementations.
+                result = provider_result
+                attempt_latency_ms = (perf_counter() - attempt_started) * 1000
 
             attempts.append(
                 AttemptLog(
                     provider=item.candidate.provider,
                     model=item.candidate.model,
                     score=item.score,
-                    latency_ms=round((perf_counter() - attempt_started) * 1000, 2),
+                    latency_ms=round(attempt_latency_ms, 2),
                     success=True,
                 )
             )

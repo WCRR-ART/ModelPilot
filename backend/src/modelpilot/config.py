@@ -1,0 +1,39 @@
+import os
+
+from pydantic import BaseModel, Field
+
+
+class Settings(BaseModel):
+    cors_origins: list[str] = ["http://localhost:3000"]
+    request_log_limit: int = Field(default=500, ge=1, le=10_000)
+
+    openai_api_key: str | None = Field(default=None, exclude=True, repr=False)
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_model: str = "gpt-4o-mini"
+
+    gemini_api_key: str | None = Field(default=None, exclude=True, repr=False)
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+    gemini_model: str = "gemini-2.0-flash"
+
+    deepseek_api_key: str | None = Field(default=None, exclude=True, repr=False)
+    deepseek_base_url: str = "https://api.deepseek.com/v1"
+    deepseek_model: str = "deepseek-chat"
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        origins = os.getenv("MODELPILOT_CORS_ORIGINS", "http://localhost:3000")
+        return cls(
+            cors_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
+            request_log_limit=int(os.getenv("MODELPILOT_REQUEST_LOG_LIMIT", "500")),
+            openai_api_key=os.getenv("OPENAI_API_KEY") or None,
+            openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            gemini_api_key=os.getenv("GEMINI_API_KEY") or None,
+            gemini_base_url=os.getenv(
+                "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"
+            ),
+            gemini_model=os.getenv("GEMINI_MODEL", "gemini-2.0-flash"),
+            deepseek_api_key=os.getenv("DEEPSEEK_API_KEY") or None,
+            deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+            deepseek_model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        )

@@ -206,7 +206,11 @@ def test_nullable_cost_is_excluded_from_average(store: SQLiteMetricsStore) -> No
     store.record_attempt(make_attempt(1, estimated_cost=None))
     store.record_attempt(make_attempt(2, estimated_cost=Decimal("0.004")))
 
-    assert require_metrics(store).estimated_average_cost == Decimal("0.003")
+    metrics = require_metrics(store)
+
+    assert metrics.priced_sample_count == 2
+    assert metrics.estimated_average_cost == Decimal("0.003")
+    assert metrics.p50_estimated_cost == Decimal("0.002")
 
 
 def test_all_nullable_costs_produce_none(store: SQLiteMetricsStore) -> None:

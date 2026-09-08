@@ -32,6 +32,7 @@ def build_gateway(
         "gemini": GeminiProvider(settings.gemini_api_key, settings.gemini_base_url, client),
         "deepseek": DeepSeekProvider(settings.deepseek_api_key, settings.deepseek_base_url, client),
     }
+    metrics_store = metrics if metrics is not None else build_metrics_store(settings)
     router = ModelRouter(
         providers,
         default_candidates(
@@ -39,8 +40,8 @@ def build_gateway(
             settings.gemini_model,
             settings.deepseek_model,
         ),
+        metrics_store,
     )
-    metrics_store = metrics if metrics is not None else build_metrics_store(settings)
     return GatewayService(
         router,
         RequestLogStore(settings.request_log_limit),

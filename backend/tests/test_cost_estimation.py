@@ -122,9 +122,17 @@ def make_gateway(
     providers: list[OutcomeProvider],
     metrics: Any,
 ) -> GatewayService:
+    candidate_count = len(providers)
     candidates = [
-        ModelCandidate(provider.name, f"{provider.name}-model", score, score, score, score)
-        for provider, score in zip(providers, range(len(providers), 0, -1), strict=True)
+        ModelCandidate(
+            provider.name,
+            f"{provider.name}-model",
+            score / candidate_count,
+            score / candidate_count,
+            score / candidate_count,
+            score / candidate_count,
+        )
+        for provider, score in zip(providers, range(candidate_count, 0, -1), strict=True)
     ]
     return GatewayService(
         ModelRouter({provider.name: provider for provider in providers}, candidates),

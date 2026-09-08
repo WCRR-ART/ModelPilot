@@ -124,7 +124,9 @@ def test_provider_metrics_snapshot_validates_counts_and_rate() -> None:
         average_latency_ms=200,
         p50_latency_ms=180,
         p95_latency_ms=350,
+        priced_sample_count=3,
         estimated_average_cost=Decimal("0.002"),
+        p50_estimated_cost=Decimal("0.002"),
         window_start=NOW - timedelta(days=7),
         window_end=NOW,
     )

@@ -53,7 +53,9 @@ class ProviderMetricsSnapshot(MetricsModel):
     average_latency_ms: NonNegativeFloat | None = None
     p50_latency_ms: NonNegativeFloat | None = None
     p95_latency_ms: NonNegativeFloat | None = None
+    priced_sample_count: NonNegativeInt = 0
     estimated_average_cost: NonNegativeDecimal | None = None
+    p50_estimated_cost: NonNegativeDecimal | None = None
     window_start: AwareDatetime
     window_end: AwareDatetime
 
@@ -69,15 +71,35 @@ class ProviderMetricsSnapshot(MetricsModel):
             self.p50_latency_ms,
             self.p95_latency_ms,
             self.estimated_average_cost,
+            self.p50_estimated_cost,
         )
         if self.sample_count == 0:
-            if self.success_rate is not None or any(value is not None for value in aggregates):
+            if (
+                self.priced_sample_count != 0
+                or self.success_rate is not None
+                or any(value is not None for value in aggregates)
+            ):
                 raise ValueError("empty snapshots must use None for rates and aggregates")
             return self
 
+        if self.priced_sample_count > self.success_count:
+            raise ValueError("priced_sample_count must not exceed success_count")
+        cost_aggregates = (self.estimated_average_cost, self.p50_estimated_cost)
+        if self.priced_sample_count == 0 and any(
+            value is not None for value in cost_aggregates
+        ):
+            raise ValueError("cost aggregates require priced samples")
+        if self.priced_sample_count > 0 and any(
+            value is None for value in cost_aggregates
+        ):
+            raise ValueError("priced samples require cost aggregates")
+
         expected_rate = self.success_count / self.sample_count
-        if self.success_rate is None or not isclose(
-            self.success_rate, expected_rate, rel_tol=0, abs_tol=1e-9
+        if self.success_rate is not None and not isclose(
+            self.success_rate,
+            expected_rate,
+            rel_tol=0,
+            abs_tol=1e-9,
         ):
             raise ValueError("success_rate must match the snapshot counts")
         return self

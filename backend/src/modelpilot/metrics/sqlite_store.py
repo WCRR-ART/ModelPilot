@@ -223,7 +223,7 @@ class SQLiteMetricsStore:
         costs = [
             attempt.estimated_cost
             for attempt in attempts
-            if attempt.estimated_cost is not None
+            if attempt.success and attempt.estimated_cost is not None
         ]
         sample_count = len(attempts)
 
@@ -237,7 +237,9 @@ class SQLiteMetricsStore:
             average_latency_ms=math.fsum(latencies) / sample_count,
             p50_latency_ms=_nearest_rank(latencies, 0.50),
             p95_latency_ms=_nearest_rank(latencies, 0.95),
+            priced_sample_count=len(costs),
             estimated_average_cost=(sum(costs, Decimal(0)) / len(costs) if costs else None),
+            p50_estimated_cost=_nearest_rank(costs, 0.50),
             window_start=min(attempt.finished_at for attempt in attempts),
             window_end=max(attempt.finished_at for attempt in attempts),
         )

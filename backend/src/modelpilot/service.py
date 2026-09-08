@@ -4,7 +4,13 @@ from time import perf_counter
 from uuid import uuid4
 
 from modelpilot.logging import RequestLogStore
-from modelpilot.metrics import MetricsStore, ModelPricing, attempt_from_outcome
+from modelpilot.metrics import (
+    MetricsStore,
+    ModelPricing,
+    RoutingDecision,
+    RoutingExplanation,
+    attempt_from_outcome,
+)
 from modelpilot.providers import ProviderError, ProviderOutcome
 from modelpilot.providers.base import sanitize_error_message
 from modelpilot.router import ModelRouter
@@ -37,7 +43,11 @@ class GatewayService:
     async def complete(self, request: ChatCompletionRequest) -> ChatCompletionPayload:
         request_id = f"req_{uuid4().hex}"
         started = perf_counter()
-        ranked = self.router.rank(request.model, request.modelpilot.preferences)
+        ranked, routing = self.router.rank_with_explanation(
+            request.model,
+            request.modelpilot.preferences,
+            request_id,
+        )
         if not ranked:
             raise NoProviderAvailable("no configured provider can serve the requested model")
 
@@ -100,15 +110,25 @@ class GatewayService:
                 selected_provider=item.candidate.provider,
                 selected_model=item.candidate.model,
             )
+            if routing is not None:
+                routing = routing.with_served_by(
+                    item.candidate.provider, item.candidate.model
+                )
+                self._record_routing_decision(routing)
             result.setdefault("modelpilot", {})
-            result["modelpilot"].update(
-                {
-                    "request_id": request_id,
+            extension = {
+                "request_id": request_id,
+                "provider": item.candidate.provider,
+                "score": item.score,
+                "attempts": len(attempts),
+                "served_by": {
                     "provider": item.candidate.provider,
-                    "score": item.score,
-                    "attempts": len(attempts),
-                }
-            )
+                    "model": item.candidate.model,
+                },
+            }
+            if routing is not None:
+                extension["routing"] = routing.model_dump(mode="json")
+            result["modelpilot"].update(extension)
             return result
 
         self._record(
@@ -118,7 +138,23 @@ class GatewayService:
             started=started,
             success=False,
         )
+        if routing is not None:
+            self._record_routing_decision(routing)
         raise AllProvidersFailed(request_id)
+
+    def _record_routing_decision(self, explanation: RoutingExplanation) -> None:
+        if self.metrics is None:
+            return
+        try:
+            self.metrics.record_routing_decision(
+                RoutingDecision.from_explanation(explanation)
+            )
+        except Exception as exc:
+            logger.warning(
+                "failed to persist routing decision for request %s: %s",
+                explanation.request_id,
+                sanitize_error_message(str(exc)),
+            )
 
     def _record_provider_attempt(
         self,

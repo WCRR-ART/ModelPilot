@@ -78,7 +78,7 @@ def test_new_database_initializes_schema_and_implements_protocol(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-    assert {"schema_version", "attempts", "pricing"} <= tables
+    assert {"schema_version", "attempts", "pricing", "routing_decisions"} <= tables
 
 
 def test_database_uses_wal_mode(database_path: Path) -> None:
@@ -90,7 +90,7 @@ def test_database_uses_wal_mode(database_path: Path) -> None:
     assert mode == "wal"
 
 
-def test_schema_version_is_one(database_path: Path) -> None:
+def test_schema_version_is_current(database_path: Path) -> None:
     SQLiteMetricsStore(database_path)
 
     with sqlite3.connect(database_path) as connection:
@@ -98,7 +98,7 @@ def test_schema_version_is_one(database_path: Path) -> None:
             "SELECT version FROM schema_version WHERE singleton = 1"
         ).fetchone()[0]
 
-    assert version == SCHEMA_VERSION == 1
+    assert version == SCHEMA_VERSION == 2
 
 
 def test_reopens_initialized_database_without_destroying_data(database_path: Path) -> None:
@@ -367,10 +367,10 @@ def test_incompatible_schema_version_fails_clearly(database_path: Path) -> None:
             "CREATE TABLE schema_version (singleton INTEGER PRIMARY KEY, version INTEGER NOT NULL)"
         )
         connection.execute(
-            "INSERT INTO schema_version (singleton, version) VALUES (?, ?)", (1, 2)
+            "INSERT INTO schema_version (singleton, version) VALUES (?, ?)", (1, 3)
         )
 
-    with pytest.raises(SchemaVersionError, match="unsupported metrics schema version 2"):
+    with pytest.raises(SchemaVersionError, match="unsupported metrics schema version 3"):
         SQLiteMetricsStore(database_path)
 
 

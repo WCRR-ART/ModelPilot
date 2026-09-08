@@ -7,6 +7,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
+PositiveInt = Annotated[int, Field(ge=1)]
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 NonNegativeDecimal = Annotated[Decimal, Field(ge=0)]
 UnitScore = Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]
@@ -125,6 +126,8 @@ class RoutingSignal(MetricsModel):
     measured_sample_count: NonNegativeInt
     measured_confidence: UnitScore
     final_score: UnitScore
+    rank: PositiveInt = 1
+    selected: bool = False
     sources: dict[MetricName, NonEmptyStr]
     reason_metadata: dict[str, ReasonValue] = Field(default_factory=dict)
 
@@ -136,7 +139,13 @@ class RoutingSignal(MetricsModel):
 
 
 class RoutingExplanation(MetricsModel):
+    request_id: NonEmptyStr
+    routing_version: NonEmptyStr = "v0.2"
     strategy: NonEmptyStr
+    selected_provider: NonEmptyStr
+    selected_model: NonEmptyStr
+    served_provider: NonEmptyStr | None = None
+    served_model: NonEmptyStr | None = None
     selected: RoutingSignal
     candidates: tuple[RoutingSignal, ...] = Field(min_length=1)
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -144,7 +153,71 @@ class RoutingExplanation(MetricsModel):
     @model_validator(mode="after")
     def selected_must_be_a_candidate(self) -> "RoutingExplanation":
         selected_key = (self.selected.provider, self.selected.model)
-        candidate_keys = {(item.provider, item.model) for item in self.candidates}
+        candidate_keys = [(item.provider, item.model) for item in self.candidates]
         if selected_key not in candidate_keys:
             raise ValueError("selected route must be present in candidates")
+        if selected_key != (self.selected_provider, self.selected_model):
+            raise ValueError("selected provider and model must match selected signal")
+        if (self.served_provider is None) != (self.served_model is None):
+            raise ValueError("served provider and model must both be set or both be None")
+        if [item.rank for item in self.candidates] != list(
+            range(1, len(self.candidates) + 1)
+        ):
+            raise ValueError("candidate ranks must be ordered, unique, and start at one")
+        selected_items = [item for item in self.candidates if item.selected]
+        if len(selected_items) != 1 or selected_items[0] != self.selected:
+            raise ValueError("exactly one candidate must be selected")
+        return self
+
+    def with_served_by(self, provider: str, model: str) -> "RoutingExplanation":
+        values = self.model_dump()
+        values.update(served_provider=provider, served_model=model)
+        return RoutingExplanation.model_validate(values)
+
+
+class RoutingDecision(MetricsModel):
+    request_id: NonEmptyStr
+    routing_version: NonEmptyStr
+    selected_provider: NonEmptyStr
+    selected_model: NonEmptyStr
+    served_provider: NonEmptyStr | None = None
+    served_model: NonEmptyStr | None = None
+    created_at: AwareDatetime
+    explanation: RoutingExplanation
+
+    @classmethod
+    def from_explanation(cls, explanation: RoutingExplanation) -> "RoutingDecision":
+        return cls(
+            request_id=explanation.request_id,
+            routing_version=explanation.routing_version,
+            selected_provider=explanation.selected_provider,
+            selected_model=explanation.selected_model,
+            served_provider=explanation.served_provider,
+            served_model=explanation.served_model,
+            created_at=explanation.created_at,
+            explanation=explanation,
+        )
+
+    @model_validator(mode="after")
+    def decision_must_match_explanation(self) -> "RoutingDecision":
+        mirrored = (
+            self.request_id,
+            self.routing_version,
+            self.selected_provider,
+            self.selected_model,
+            self.served_provider,
+            self.served_model,
+            self.created_at,
+        )
+        explained = (
+            self.explanation.request_id,
+            self.explanation.routing_version,
+            self.explanation.selected_provider,
+            self.explanation.selected_model,
+            self.explanation.served_provider,
+            self.explanation.served_model,
+            self.explanation.created_at,
+        )
+        if mirrored != explained:
+            raise ValueError("routing decision metadata must match its explanation")
         return self

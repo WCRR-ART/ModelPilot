@@ -96,6 +96,48 @@ Optional routing priorities can be supplied in `modelpilot.preferences`; omitted
 
 For `auto`, ModelPilot filters out providers without API keys, calculates a weighted score from quality, cost, latency, and reliability, then attempts candidates from highest to lowest score. If an attempt fails, the next ranked provider is tried. The V0.1 scores are static normalized estimates, not benchmark claims.
 
+### ModelPilot response extension
+
+On the V0.2 development branch, successful automatic responses keep the standard OpenAI-compatible
+`id`, `object`, `model`, `choices`, and `usage` fields and add routing evidence under the
+ModelPilot-specific top-level `modelpilot` extension:
+
+```json
+{
+  "modelpilot": {
+    "request_id": "req_...",
+    "served_by": {"provider": "gemini", "model": "gemini-2.0-flash"},
+    "routing": {
+      "routing_version": "v0.2",
+      "selected_provider": "deepseek",
+      "selected_model": "deepseek-chat",
+      "served_provider": "gemini",
+      "served_model": "gemini-2.0-flash",
+      "candidates": [
+        {
+          "provider": "deepseek",
+          "model": "deepseek-chat",
+          "rank": 1,
+          "selected": true,
+          "final_score": 0.88,
+          "sources": {
+            "quality": "configured",
+            "latency": "blended",
+            "reliability": "blended",
+            "cost": "static_unavailable"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+The selected candidate is the Router's first choice; `served_by` identifies the provider that
+actually returned the response after any fallback. Scores are internal routing inputs derived from
+configured baselines and metrics measured by this local ModelPilot installation. They are not live
+provider benchmarks. Explicit-model requests include `served_by` but no automatic routing explanation.
+
 ## Environment variables
 
 | Variable | Purpose | Default |

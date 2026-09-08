@@ -88,14 +88,34 @@ class ModelRouter:
         requested_model: str,
         preferences: RoutingPreferences,
     ) -> list[RankedCandidate]:
-        ranked, _ = self.rank_with_explanation(requested_model, preferences)
-        return ranked
+        return self._rank(requested_model, preferences)
 
     def rank_with_explanation(
         self,
         requested_model: str,
         preferences: RoutingPreferences,
+        request_id: str,
     ) -> tuple[list[RankedCandidate], RoutingExplanation | None]:
+        ranked = self._rank(requested_model, preferences)
+        if requested_model != "auto" or not ranked:
+            return ranked, None
+        explanation = RoutingExplanation(
+            request_id=request_id,
+            routing_version="v0.2",
+            strategy="weighted_measured_v1",
+            selected_provider=ranked[0].candidate.provider,
+            selected_model=ranked[0].candidate.model,
+            selected=ranked[0].signal,
+            candidates=tuple(item.signal for item in ranked),
+            created_at=datetime.now(UTC),
+        )
+        return ranked, explanation
+
+    def _rank(
+        self,
+        requested_model: str,
+        preferences: RoutingPreferences,
+    ) -> list[RankedCandidate]:
         weights = preferences.normalized()
         available = [
             candidate
@@ -119,15 +139,17 @@ class ModelRouter:
             ranked,
             key=lambda item: (-item.score, item.candidate.provider, item.candidate.model),
         )
-        if requested_model != "auto" or not ranked:
-            return ranked, None
-        explanation = RoutingExplanation(
-            strategy="weighted_measured_v1",
-            selected=ranked[0].signal,
-            candidates=tuple(item.signal for item in ranked),
-            created_at=datetime.now(UTC),
-        )
-        return ranked, explanation
+        return [
+            RankedCandidate(
+                candidate=item.candidate,
+                provider=item.provider,
+                score=item.score,
+                signal=item.signal.model_copy(
+                    update={"rank": rank, "selected": rank == 1}
+                ),
+            )
+            for rank, item in enumerate(ranked, start=1)
+        ]
 
     def _read_snapshots(
         self, candidates: list[ModelCandidate]

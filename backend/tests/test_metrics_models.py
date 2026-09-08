@@ -251,9 +251,13 @@ def test_routing_signal_rejects_out_of_range_values(field: str, value: float) ->
 def test_routing_explanation_serializes_structured_signals() -> None:
     signal = make_signal()
     explanation = RoutingExplanation(
+        request_id="req_test",
+        routing_version="v0.2",
         strategy="weighted_measured_v1",
-        selected=signal,
-        candidates=(signal,),
+        selected_provider=signal.provider,
+        selected_model=signal.model,
+        selected=signal.model_copy(update={"selected": True}),
+        candidates=(signal.model_copy(update={"selected": True}),),
         created_at=NOW,
     )
 

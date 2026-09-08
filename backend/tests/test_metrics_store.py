@@ -6,6 +6,7 @@ from modelpilot.metrics import (
     MetricsStore,
     ModelPricing,
     ProviderMetricsSnapshot,
+    RoutingDecision,
 )
 
 NOW = datetime(2026, 9, 7, 12, tzinfo=UTC)
@@ -18,6 +19,7 @@ class FakeMetricsStore:
         self.attempts: list[AttemptRecord] = []
         self.snapshots: dict[tuple[str, str], ProviderMetricsSnapshot] = {}
         self.pricing: dict[tuple[str, str], ModelPricing] = {}
+        self.decisions: dict[str, RoutingDecision] = {}
 
     def record_attempt(self, attempt: AttemptRecord) -> None:
         self.attempts.append(attempt)
@@ -56,6 +58,19 @@ class FakeMetricsStore:
 
     def upsert_pricing(self, pricing: ModelPricing) -> None:
         self.pricing[(pricing.provider, pricing.model)] = pricing
+
+    def record_routing_decision(self, decision: RoutingDecision) -> None:
+        self.decisions[decision.request_id] = decision
+
+    def get_routing_decision(self, request_id: str) -> RoutingDecision | None:
+        return self.decisions.get(request_id)
+
+    def list_recent_routing_decisions(self, limit: int) -> list[RoutingDecision]:
+        return sorted(
+            self.decisions.values(),
+            key=lambda item: (item.created_at, item.request_id),
+            reverse=True,
+        )[:limit]
 
 
 def test_fake_store_implements_metrics_store_protocol() -> None:

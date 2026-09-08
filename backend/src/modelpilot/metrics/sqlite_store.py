@@ -10,9 +10,15 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from modelpilot.metrics.models import AttemptRecord, ModelPricing, ProviderMetricsSnapshot
+from modelpilot.metrics.models import (
+    AttemptRecord,
+    ModelPricing,
+    ProviderMetricsSnapshot,
+    RoutingDecision,
+    RoutingExplanation,
+)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 METRICS_ATTEMPT_LIMIT = 100
 METRICS_MAX_AGE = timedelta(days=7)
 
@@ -23,6 +29,10 @@ class SchemaVersionError(RuntimeError):
 
 class MetricsStoreDataError(RuntimeError):
     """Raised when persisted data cannot be restored to a domain model."""
+
+
+class DuplicateRoutingDecisionError(RuntimeError):
+    """Raised when a routing decision already exists for a request ID."""
 
 
 class SQLiteMetricsStore:
@@ -64,14 +74,21 @@ class SQLiteMetricsStore:
                 ).fetchone()
                 if row is None:
                     self._create_version_one_schema(connection)
+                    self._migrate_version_one_to_two(connection)
                     connection.execute(
                         "INSERT INTO schema_version (singleton, version) VALUES (?, ?)",
                         (1, SCHEMA_VERSION),
                     )
-                elif row["version"] != SCHEMA_VERSION:
+                elif row["version"] > SCHEMA_VERSION or row["version"] < 1:
                     raise SchemaVersionError(
                         f"unsupported metrics schema version {row['version']}; "
                         f"expected {SCHEMA_VERSION}"
+                    )
+                elif row["version"] == 1:
+                    self._migrate_version_one_to_two(connection)
+                    connection.execute(
+                        "UPDATE schema_version SET version = ? WHERE singleton = 1",
+                        (SCHEMA_VERSION,),
                     )
                 connection.commit()
             except Exception:
@@ -120,6 +137,30 @@ class SQLiteMetricsStore:
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (provider, model)
             )
+            """
+        )
+
+    @staticmethod
+    def _migrate_version_one_to_two(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS routing_decisions (
+                request_id TEXT PRIMARY KEY CHECK (length(request_id) > 0),
+                routing_version TEXT NOT NULL CHECK (length(routing_version) > 0),
+                selected_provider TEXT NOT NULL CHECK (length(selected_provider) > 0),
+                selected_model TEXT NOT NULL CHECK (length(selected_model) > 0),
+                served_provider TEXT,
+                served_model TEXT,
+                created_at TEXT NOT NULL,
+                explanation_json TEXT NOT NULL,
+                CHECK ((served_provider IS NULL) = (served_model IS NULL))
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS routing_decisions_created
+            ON routing_decisions (created_at DESC, request_id DESC)
             """
         )
 
@@ -296,6 +337,64 @@ class SQLiteMetricsStore:
             )
             connection.commit()
 
+    def record_routing_decision(self, decision: RoutingDecision) -> None:
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO routing_decisions (
+                        request_id, routing_version, selected_provider, selected_model,
+                        served_provider, served_model, created_at, explanation_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        decision.request_id,
+                        decision.routing_version,
+                        decision.selected_provider,
+                        decision.selected_model,
+                        decision.served_provider,
+                        decision.served_model,
+                        _serialize_datetime(decision.created_at),
+                        decision.explanation.model_dump_json(),
+                    ),
+                )
+                connection.commit()
+        except sqlite3.IntegrityError as error:
+            if "routing_decisions.request_id" in str(error):
+                raise DuplicateRoutingDecisionError(
+                    f"routing decision already exists for request {decision.request_id}"
+                ) from error
+            raise
+
+    def get_routing_decision(self, request_id: str) -> RoutingDecision | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT request_id, routing_version, selected_provider, selected_model,
+                       served_provider, served_model, created_at, explanation_json
+                FROM routing_decisions
+                WHERE request_id = ?
+                """,
+                (request_id,),
+            ).fetchone()
+        return _routing_decision_from_row(row) if row is not None else None
+
+    def list_recent_routing_decisions(self, limit: int) -> list[RoutingDecision]:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT request_id, routing_version, selected_provider, selected_model,
+                       served_provider, served_model, created_at, explanation_json
+                FROM routing_decisions
+                ORDER BY created_at DESC, request_id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_routing_decision_from_row(row) for row in rows]
+
 
 def _serialize_datetime(value: datetime) -> str:
     if value.tzinfo is None or value.utcoffset() is None:
@@ -342,6 +441,23 @@ def _pricing_from_row(row: sqlite3.Row) -> ModelPricing:
         )
     except (KeyError, TypeError, ValueError, ValidationError) as error:
         raise MetricsStoreDataError("malformed pricing row") from error
+
+
+def _routing_decision_from_row(row: sqlite3.Row) -> RoutingDecision:
+    try:
+        explanation = RoutingExplanation.model_validate_json(row["explanation_json"])
+        return RoutingDecision(
+            request_id=row["request_id"],
+            routing_version=row["routing_version"],
+            selected_provider=row["selected_provider"],
+            selected_model=row["selected_model"],
+            served_provider=row["served_provider"],
+            served_model=row["served_model"],
+            created_at=row["created_at"],
+            explanation=explanation,
+        )
+    except (KeyError, TypeError, ValueError, ValidationError) as error:
+        raise MetricsStoreDataError("malformed routing decision row") from error
 
 
 def _nearest_rank(values: Sequence[float], percentile: float) -> float | None:

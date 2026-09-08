@@ -73,6 +73,46 @@ API 默认地址为 `http://localhost:8000`，Dashboard 默认地址为 `http://
 
 自动路由会过滤未配置 API Key 的 Provider，按照 quality、cost、latency、reliability 的权重计算分数，再从高到低尝试候选模型。某次请求失败时会继续尝试下一候选。V0.1 的分数是静态归一化估计，不是 benchmark 数据。
 
+## ModelPilot 响应扩展
+
+在 V0.2 开发分支中，自动路由成功响应继续保留 OpenAI-compatible 的 `id`、`object`、
+`model`、`choices` 和 `usage` 字段，并在 ModelPilot 专属的顶层 `modelpilot` 扩展中返回路由依据：
+
+```json
+{
+  "modelpilot": {
+    "request_id": "req_...",
+    "served_by": {"provider": "gemini", "model": "gemini-2.0-flash"},
+    "routing": {
+      "routing_version": "v0.2",
+      "selected_provider": "deepseek",
+      "selected_model": "deepseek-chat",
+      "served_provider": "gemini",
+      "served_model": "gemini-2.0-flash",
+      "candidates": [
+        {
+          "provider": "deepseek",
+          "model": "deepseek-chat",
+          "rank": 1,
+          "selected": true,
+          "final_score": 0.88,
+          "sources": {
+            "quality": "configured",
+            "latency": "blended",
+            "reliability": "blended",
+            "cost": "static_unavailable"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+selected candidate 表示 Router 的第一选择；`served_by` 表示经过 fallback 后实际返回响应的
+Provider。分数是内部路由依据，来自配置的 baseline 与当前 ModelPilot 实例采集的本地 metrics，
+不是实时 Provider benchmark。显式模型请求只返回 `served_by`，不会伪造自动路由 explanation。
+
 ## 环境变量
 
 | 变量 | 用途 | 默认值 |

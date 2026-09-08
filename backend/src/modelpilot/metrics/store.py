@@ -1,7 +1,12 @@
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
-from modelpilot.metrics.models import AttemptRecord, ModelPricing, ProviderMetricsSnapshot
+from modelpilot.metrics.models import (
+    AttemptRecord,
+    ModelPricing,
+    ProviderMetricsSnapshot,
+    RoutingDecision,
+)
 
 
 @runtime_checkable
@@ -29,3 +34,9 @@ class MetricsStore(Protocol):
     def list_pricing(self) -> list[ModelPricing]: ...
 
     def upsert_pricing(self, pricing: ModelPricing) -> None: ...
+
+    def record_routing_decision(self, decision: RoutingDecision) -> None: ...
+
+    def get_routing_decision(self, request_id: str) -> RoutingDecision | None: ...
+
+    def list_recent_routing_decisions(self, limit: int) -> list[RoutingDecision]: ...

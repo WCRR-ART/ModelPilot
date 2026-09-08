@@ -182,7 +182,9 @@ def test_confidence_one_fully_applies_measured_signals() -> None:
     )
     router, _ = make_router([candidate], {("a", "a-model"): snapshot})
 
-    ranked, explanation = router.rank_with_explanation("auto", RoutingPreferences())
+    ranked, explanation = router.rank_with_explanation(
+        "auto", RoutingPreferences(), "req_test"
+    )
     signal = ranked[0].signal
 
     assert explanation is not None
@@ -359,7 +361,9 @@ def test_routing_signal_and_explanation_are_structured_and_serializable() -> Non
     candidate = ModelCandidate("a", "a-model", 0.8, 0.7, 0.6, 0.5)
     router, _ = make_router([candidate], {})
 
-    ranked, explanation = router.rank_with_explanation("auto", RoutingPreferences())
+    ranked, explanation = router.rank_with_explanation(
+        "auto", RoutingPreferences(), "req_test"
+    )
 
     assert explanation is not None
     payload = json.loads(explanation.model_dump_json())
@@ -394,7 +398,9 @@ def test_explicit_model_uses_static_scoring_and_has_no_auto_explanation() -> Non
     snapshot = make_snapshot("a", "a-model", p50_latency_ms=500)
     router, store = make_router([candidate], {("a", "a-model"): snapshot})
 
-    ranked, explanation = router.rank_with_explanation("a-model", RoutingPreferences())
+    ranked, explanation = router.rank_with_explanation(
+        "a-model", RoutingPreferences(), "req_test"
+    )
 
     assert ranked[0].score == pytest.approx(0.35)
     assert explanation is None

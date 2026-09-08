@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -6,6 +7,7 @@ from pydantic import BaseModel, Field
 class Settings(BaseModel):
     cors_origins: list[str] = ["http://localhost:3000"]
     request_log_limit: int = Field(default=500, ge=1, le=10_000)
+    metrics_db_path: Path = Path("./data/modelpilot.db")
 
     openai_api_key: str | None = Field(default=None, exclude=True, repr=False)
     openai_base_url: str = "https://api.openai.com/v1"
@@ -25,6 +27,9 @@ class Settings(BaseModel):
         return cls(
             cors_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
             request_log_limit=int(os.getenv("MODELPILOT_REQUEST_LOG_LIMIT", "500")),
+            metrics_db_path=Path(
+                os.getenv("MODELPILOT_METRICS_DB", "./data/modelpilot.db")
+            ),
             openai_api_key=os.getenv("OPENAI_API_KEY") or None,
             openai_base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),

@@ -64,6 +64,9 @@ npm run dev
 
 API 默认地址为 `http://localhost:8000`，Dashboard 默认地址为 `http://localhost:3000`。
 
+在 V0.2 开发分支中，已完成的 Provider 尝试默认写入 `./data/modelpilot.db`。可通过
+`MODELPILOT_METRICS_DB` 修改路径，父目录会自动创建。数据库不会保存提示词、补全内容或凭据。
+
 ## `model: "auto"` 的含义
 
 自动路由会过滤未配置 API Key 的 Provider，按照 quality、cost、latency、reliability 的权重计算分数，再从高到低尝试候选模型。某次请求失败时会继续尝试下一候选。V0.1 的分数是静态归一化估计，不是 benchmark 数据。
@@ -74,6 +77,7 @@ API 默认地址为 `http://localhost:8000`，Dashboard 默认地址为 `http://
 | --- | --- | --- |
 | `MODELPILOT_CORS_ORIGINS` | Dashboard 允许的来源，多个值用逗号分隔 | `http://localhost:3000` |
 | `MODELPILOT_REQUEST_LOG_LIMIT` | 内存请求日志最大条数 | `500` |
+| `MODELPILOT_METRICS_DB` | Provider 尝试记录使用的 SQLite 文件 | `./data/modelpilot.db` |
 | `OPENAI_API_KEY` | 启用 OpenAI Provider | 未设置 |
 | `OPENAI_BASE_URL` / `OPENAI_MODEL` | OpenAI 地址与自动路由模型 | 官方地址 / `gpt-4o-mini` |
 | `GEMINI_API_KEY` | 启用 Gemini Provider | 未设置 |

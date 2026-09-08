@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -8,13 +9,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from modelpilot import __version__
 from modelpilot.config import Settings
 from modelpilot.logging import RequestLogStore
+from modelpilot.metrics import MetricsStore, SQLiteMetricsStore
 from modelpilot.providers import DeepSeekProvider, GeminiProvider, OpenAIProvider
 from modelpilot.router import ModelRouter, default_candidates
 from modelpilot.schemas import ChatCompletionPayload, ChatCompletionRequest, RequestLog
 from modelpilot.service import AllProvidersFailed, GatewayService, NoProviderAvailable
 
 
-def build_gateway(settings: Settings, client: httpx.AsyncClient) -> GatewayService:
+def build_metrics_store(settings: Settings) -> SQLiteMetricsStore:
+    database_path = Path(settings.metrics_db_path)
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+    return SQLiteMetricsStore(database_path)
+
+
+def build_gateway(
+    settings: Settings,
+    client: httpx.AsyncClient,
+    metrics: MetricsStore | None = None,
+) -> GatewayService:
     providers = {
         "openai": OpenAIProvider(settings.openai_api_key, settings.openai_base_url, client),
         "gemini": GeminiProvider(settings.gemini_api_key, settings.gemini_base_url, client),
@@ -28,7 +40,12 @@ def build_gateway(settings: Settings, client: httpx.AsyncClient) -> GatewayServi
             settings.deepseek_model,
         ),
     )
-    return GatewayService(router, RequestLogStore(settings.request_log_limit))
+    metrics_store = metrics if metrics is not None else build_metrics_store(settings)
+    return GatewayService(
+        router,
+        RequestLogStore(settings.request_log_limit),
+        metrics_store,
+    )
 
 
 def create_app(

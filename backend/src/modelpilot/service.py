@@ -1,12 +1,16 @@
+import logging
 from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
 from modelpilot.logging import RequestLogStore
+from modelpilot.metrics import MetricsStore, attempt_from_outcome
 from modelpilot.providers import ProviderError, ProviderOutcome
 from modelpilot.providers.base import sanitize_error_message
 from modelpilot.router import ModelRouter
 from modelpilot.schemas import AttemptLog, ChatCompletionPayload, ChatCompletionRequest, RequestLog
+
+logger = logging.getLogger(__name__)
 
 
 class NoProviderAvailable(RuntimeError):
@@ -20,9 +24,15 @@ class AllProvidersFailed(RuntimeError):
 
 
 class GatewayService:
-    def __init__(self, router: ModelRouter, logs: RequestLogStore) -> None:
+    def __init__(
+        self,
+        router: ModelRouter,
+        logs: RequestLogStore,
+        metrics: MetricsStore | None = None,
+    ) -> None:
         self.router = router
         self.logs = logs
+        self.metrics = metrics
 
     async def complete(self, request: ChatCompletionRequest) -> ChatCompletionPayload:
         request_id = f"req_{uuid4().hex}"
@@ -32,7 +42,7 @@ class GatewayService:
             raise NoProviderAvailable("no configured provider can serve the requested model")
 
         attempts: list[AttemptLog] = []
-        for item in ranked:
+        for attempt_index, item in enumerate(ranked):
             attempt_started = perf_counter()
             try:
                 provider_result = await item.provider.complete(request, item.candidate.model)
@@ -50,6 +60,7 @@ class GatewayService:
                 continue
 
             if isinstance(provider_result, ProviderOutcome):
+                self._record_provider_attempt(provider_result, request_id, attempt_index)
                 if not provider_result.success:
                     attempts.append(
                         AttemptLog(
@@ -108,6 +119,29 @@ class GatewayService:
             success=False,
         )
         raise AllProvidersFailed(request_id)
+
+    def _record_provider_attempt(
+        self,
+        outcome: ProviderOutcome,
+        request_id: str,
+        attempt_index: int,
+    ) -> None:
+        if self.metrics is None:
+            return
+        try:
+            attempt = attempt_from_outcome(
+                outcome,
+                request_id,
+                attempt_index=attempt_index,
+            )
+            self.metrics.record_attempt(attempt)
+        except Exception as exc:
+            logger.warning(
+                "failed to record provider attempt for request %s and provider %s: %s",
+                request_id,
+                outcome.provider,
+                sanitize_error_message(str(exc)),
+            )
 
     def _record(
         self,

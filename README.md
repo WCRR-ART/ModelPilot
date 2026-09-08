@@ -56,6 +56,10 @@ python -m uvicorn modelpilot.main:app --reload --env-file ../.env
 
 The API is available at `http://localhost:8000`. A provider is enabled only when its API key is present in the environment.
 
+On the V0.2 development branch, completed provider attempts are stored in SQLite at
+`./data/modelpilot.db` by default. Set `MODELPILOT_METRICS_DB` to use another path; the parent
+directory is created automatically. Prompts, completions, and credentials are not stored.
+
 ### Dashboard
 
 ```bash
@@ -96,6 +100,7 @@ For `auto`, ModelPilot filters out providers without API keys, calculates a weig
 | --- | --- | --- |
 | `MODELPILOT_CORS_ORIGINS` | Comma-separated allowed dashboard origins | `http://localhost:3000` |
 | `MODELPILOT_REQUEST_LOG_LIMIT` | Maximum in-memory request-log records | `500` |
+| `MODELPILOT_METRICS_DB` | SQLite file for completed provider attempts | `./data/modelpilot.db` |
 | `OPENAI_API_KEY` | Enables the OpenAI adapter | unset |
 | `OPENAI_BASE_URL` | OpenAI-compatible base URL | `https://api.openai.com/v1` |
 | `OPENAI_MODEL` | OpenAI candidate used by `auto` | `gpt-4o-mini` |

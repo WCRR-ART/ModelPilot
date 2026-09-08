@@ -1,4 +1,5 @@
 from modelpilot.metrics.attempts import attempt_from_outcome
+from modelpilot.metrics.costs import estimate_cost
 from modelpilot.metrics.models import (
     AttemptRecord,
     ModelPricing,
@@ -30,4 +31,5 @@ __all__ = [
     "SQLiteMetricsStore",
     "SchemaVersionError",
     "attempt_from_outcome",
+    "estimate_cost",
 ]

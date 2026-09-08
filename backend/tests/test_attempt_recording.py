@@ -42,8 +42,14 @@ class RecordingStore:
     def record_attempt(self, attempt: AttemptRecord) -> None:
         self.attempts.append(attempt)
 
+    def get_pricing(self, provider: str, model: str) -> None:
+        return None
+
 
 class FailingStore:
+    def get_pricing(self, provider: str, model: str) -> None:
+        return None
+
     def record_attempt(self, attempt: AttemptRecord) -> None:
         raise RuntimeError("Authorization: Bearer metrics-secret")
 

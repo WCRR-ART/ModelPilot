@@ -59,6 +59,8 @@ The API is available at `http://localhost:8000`. A provider is enabled only when
 On the V0.2 development branch, completed provider attempts are stored in SQLite at
 `./data/modelpilot.db` by default. Set `MODELPILOT_METRICS_DB` to use another path; the parent
 directory is created automatically. Prompts, completions, and credentials are not stored.
+When matching configured pricing and real input/output token usage are available, ModelPilot stores
+a Decimal cost estimate. It is not provider billing; without either input, cost remains unavailable.
 
 ### Dashboard
 

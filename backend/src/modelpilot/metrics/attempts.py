@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
-from modelpilot.metrics.models import AttemptRecord
+from modelpilot.metrics.costs import estimate_cost
+from modelpilot.metrics.models import AttemptRecord, ModelPricing
 from modelpilot.providers import ProviderOutcome
 
 
@@ -9,6 +10,7 @@ def attempt_from_outcome(
     request_id: str,
     *,
     attempt_index: int = 0,
+    pricing: ModelPricing | None = None,
 ) -> AttemptRecord:
     return AttemptRecord(
         request_id=request_id,
@@ -23,6 +25,10 @@ def attempt_from_outcome(
         input_tokens=outcome.input_tokens,
         output_tokens=outcome.output_tokens,
         total_tokens=outcome.total_tokens,
-        estimated_cost=None,
+        estimated_cost=estimate_cost(
+            pricing,
+            outcome.input_tokens,
+            outcome.output_tokens,
+        ),
         created_at=datetime.now(UTC),
     )

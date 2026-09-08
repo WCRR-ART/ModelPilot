@@ -4,7 +4,7 @@ from time import perf_counter
 from uuid import uuid4
 
 from modelpilot.logging import RequestLogStore
-from modelpilot.metrics import MetricsStore, attempt_from_outcome
+from modelpilot.metrics import MetricsStore, ModelPricing, attempt_from_outcome
 from modelpilot.providers import ProviderError, ProviderOutcome
 from modelpilot.providers.base import sanitize_error_message
 from modelpilot.router import ModelRouter
@@ -128,11 +128,22 @@ class GatewayService:
     ) -> None:
         if self.metrics is None:
             return
+        pricing: ModelPricing | None = None
+        try:
+            pricing = self.metrics.get_pricing(outcome.provider, outcome.model)
+        except Exception as exc:
+            logger.warning(
+                "failed to look up pricing for request %s and provider %s: %s",
+                request_id,
+                outcome.provider,
+                sanitize_error_message(str(exc)),
+            )
         try:
             attempt = attempt_from_outcome(
                 outcome,
                 request_id,
                 attempt_index=attempt_index,
+                pricing=pricing,
             )
             self.metrics.record_attempt(attempt)
         except Exception as exc:

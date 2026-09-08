@@ -66,6 +66,8 @@ API 默认地址为 `http://localhost:8000`，Dashboard 默认地址为 `http://
 
 在 V0.2 开发分支中，已完成的 Provider 尝试默认写入 `./data/modelpilot.db`。可通过
 `MODELPILOT_METRICS_DB` 修改路径，父目录会自动创建。数据库不会保存提示词、补全内容或凭据。
+当存在精确匹配的配置价格和真实输入/输出 token usage 时，ModelPilot 会保存 Decimal 成本估算。
+该值不是 Provider 账单；缺少任一输入时成本保持不可用。
 
 ## `model: "auto"` 的含义
 

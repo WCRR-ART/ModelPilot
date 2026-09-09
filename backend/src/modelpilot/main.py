@@ -91,7 +91,7 @@ def create_app(
         request: Request,
     ) -> ChatCompletionPayload:
         if payload.stream:
-            raise HTTPException(status_code=400, detail="streaming is not supported in V0.1")
+            raise HTTPException(status_code=400, detail="streaming is not supported in V0.2")
         service: GatewayService = request.app.state.gateway
         try:
             return await service.complete(payload)

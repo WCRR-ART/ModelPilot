@@ -2,7 +2,8 @@
 
 ## Status
 
-Planning document. Nothing in this document is implemented by v0.1.0.
+Implementation complete locally for the v0.2.0 release candidate. Remote CI, tagging, and release
+publication remain separate post-push gates.
 
 ## Why V0.2 exists
 

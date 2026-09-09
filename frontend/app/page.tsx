@@ -234,7 +234,7 @@ export default function Dashboard() {
         <div className="brand">
           <span className="brandMark" aria-hidden="true">M</span>
           <span>ModelPilot</span>
-          <span className="version">V0.2 DEV</span>
+          <span className="version">V0.2.0</span>
         </div>
         <div className={`health ${health.status}`} aria-live="polite">
           <span className="healthDot" aria-hidden="true" />

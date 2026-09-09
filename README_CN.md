@@ -113,6 +113,22 @@ selected candidate 表示 Router 的第一选择；`served_by` 表示经过 fall
 Provider。分数是内部路由依据，来自配置的 baseline 与当前 ModelPilot 实例采集的本地 metrics，
 不是实时 Provider benchmark。显式模型请求只返回 `served_by`，不会伪造自动路由 explanation。
 
+## 只读 Metrics API
+
+V0.2 开发分支通过四个只读接口提供本地持久化 metrics：
+
+- `GET /v1/metrics/summary?hours=24`：distinct 请求、attempt、成功/失败、延迟、估算成本、
+  Provider、模型与路由决策汇总；窗口 hours 限制为 1–168
+- `GET /v1/metrics/providers`：最近七天且最多 100 次 attempt 的 Provider/模型快照；
+  支持精确的 `provider` 和 `model` 可选过滤
+- `GET /v1/metrics/routing-decisions?limit=20`：已持久化的结构化路由依据
+- `GET /v1/metrics/failures?limit=20`：最近的标准化失败类别
+
+决策和失败记录的 limit 上限均为 100。Decimal 成本以无精度损失的定点字符串返回，
+不可用时保持 `null`。成本来自配置价格与 Provider 报告的真实 usage，是估算值而非账单。
+这些接口不会返回 prompt、completion、凭据、Authorization header 或 Provider 原始错误信息，
+也不提供 metrics 或 pricing 写接口。
+
 ## 环境变量
 
 | 变量 | 用途 | 默认值 |

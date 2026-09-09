@@ -3,7 +3,14 @@ from decimal import Decimal
 from math import isclose
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    model_validator,
+)
 
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
@@ -59,6 +66,12 @@ class ProviderMetricsSnapshot(MetricsModel):
     p50_estimated_cost: NonNegativeDecimal | None = None
     window_start: AwareDatetime
     window_end: AwareDatetime
+
+    @field_serializer(
+        "estimated_average_cost", "p50_estimated_cost", when_used="json"
+    )
+    def serialize_cost(self, value: Decimal | None) -> str | None:
+        return format(value, "f") if value is not None else None
 
     @model_validator(mode="after")
     def validate_counts_and_aggregates(self) -> "ProviderMetricsSnapshot":
@@ -221,3 +234,57 @@ class RoutingDecision(MetricsModel):
         if mirrored != explained:
             raise ValueError("routing decision metadata must match its explanation")
         return self
+
+
+class MetricsWindow(MetricsModel):
+    since: AwareDatetime
+    until: AwareDatetime
+
+    @model_validator(mode="after")
+    def validate_window(self) -> "MetricsWindow":
+        if self.until < self.since:
+            raise ValueError("until must not be earlier than since")
+        return self
+
+
+class MetricsSummary(MetricsModel):
+    window: MetricsWindow
+    request_count: NonNegativeInt
+    attempt_count: NonNegativeInt
+    success_count: NonNegativeInt
+    failure_count: NonNegativeInt
+    success_rate: UnitScore | None = None
+    average_latency_ms: NonNegativeFloat | None = None
+    estimated_total_cost: NonNegativeDecimal | None = None
+    providers_count: NonNegativeInt
+    models_count: NonNegativeInt
+    routing_decision_count: NonNegativeInt
+
+    @field_serializer("estimated_total_cost", when_used="json")
+    def serialize_estimated_total_cost(self, value: Decimal | None) -> str | None:
+        return format(value, "f") if value is not None else None
+
+    @model_validator(mode="after")
+    def validate_attempt_counts(self) -> "MetricsSummary":
+        if self.success_count + self.failure_count != self.attempt_count:
+            raise ValueError("attempt_count must equal success_count plus failure_count")
+        if self.attempt_count == 0:
+            if self.success_rate is not None or self.average_latency_ms is not None:
+                raise ValueError("empty summaries must use None for measured rates")
+            return self
+        expected_rate = self.success_count / self.attempt_count
+        if self.success_rate is None or not isclose(
+            self.success_rate, expected_rate, rel_tol=0, abs_tol=1e-9
+        ):
+            raise ValueError("success_rate must match the summary counts")
+        return self
+
+
+class RecentFailure(MetricsModel):
+    request_id: NonEmptyStr
+    provider: NonEmptyStr
+    model: NonEmptyStr
+    finished_at: AwareDatetime
+    created_at: AwareDatetime
+    latency_ms: NonNegativeFloat
+    error_type: str | None = None

@@ -3,8 +3,10 @@ from typing import Protocol, runtime_checkable
 
 from modelpilot.metrics.models import (
     AttemptRecord,
+    MetricsSummary,
     ModelPricing,
     ProviderMetricsSnapshot,
+    RecentFailure,
     RoutingDecision,
 )
 
@@ -40,3 +42,9 @@ class MetricsStore(Protocol):
     def get_routing_decision(self, request_id: str) -> RoutingDecision | None: ...
 
     def list_recent_routing_decisions(self, limit: int) -> list[RoutingDecision]: ...
+
+    def get_metrics_summary(
+        self, since: datetime, until: datetime
+    ) -> MetricsSummary: ...
+
+    def list_recent_failures(self, limit: int) -> list[RecentFailure]: ...

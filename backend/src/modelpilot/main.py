@@ -10,6 +10,7 @@ from modelpilot import __version__
 from modelpilot.config import Settings
 from modelpilot.logging import RequestLogStore
 from modelpilot.metrics import MetricsStore, SQLiteMetricsStore
+from modelpilot.metrics.api import router as metrics_router
 from modelpilot.providers import DeepSeekProvider, GeminiProvider, OpenAIProvider
 from modelpilot.router import ModelRouter, default_candidates
 from modelpilot.schemas import ChatCompletionPayload, ChatCompletionRequest, RequestLog
@@ -78,6 +79,7 @@ def create_app(
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type", "Authorization"],
     )
+    app.include_router(metrics_router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

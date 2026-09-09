@@ -5,15 +5,18 @@ import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from modelpilot.metrics.models import (
     AttemptRecord,
+    MetricsSummary,
+    MetricsWindow,
     ModelPricing,
     ProviderMetricsSnapshot,
+    RecentFailure,
     RoutingDecision,
     RoutingExplanation,
 )
@@ -21,6 +24,17 @@ from modelpilot.metrics.models import (
 SCHEMA_VERSION = 2
 METRICS_ATTEMPT_LIMIT = 100
 METRICS_MAX_AGE = timedelta(days=7)
+SAFE_ERROR_TYPES = frozenset(
+    {
+        "timeout",
+        "connection_error",
+        "authentication_error",
+        "rate_limit",
+        "provider_error",
+        "invalid_response",
+        "unknown_error",
+    }
+)
 
 
 class SchemaVersionError(RuntimeError):
@@ -395,6 +409,84 @@ class SQLiteMetricsStore:
             ).fetchall()
         return [_routing_decision_from_row(row) for row in rows]
 
+    def get_metrics_summary(
+        self,
+        since: datetime,
+        until: datetime,
+    ) -> MetricsSummary:
+        serialized_since = _serialize_datetime(since)
+        serialized_until = _serialize_datetime(until)
+        if until < since:
+            raise ValueError("until must not be earlier than since")
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(DISTINCT request_id) AS request_count,
+                       COUNT(*) AS attempt_count,
+                       COALESCE(SUM(success), 0) AS success_count,
+                       AVG(latency_ms) AS average_latency_ms,
+                       COUNT(DISTINCT provider) AS providers_count,
+                       COUNT(DISTINCT model) AS models_count
+                FROM attempts
+                WHERE finished_at >= ? AND finished_at <= ?
+                """,
+                (serialized_since, serialized_until),
+            ).fetchone()
+            routing_decision_count = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM routing_decisions
+                WHERE created_at >= ? AND created_at <= ?
+                """,
+                (serialized_since, serialized_until),
+            ).fetchone()[0]
+            cost_rows = connection.execute(
+                """
+                SELECT estimated_cost
+                FROM attempts
+                WHERE finished_at >= ? AND finished_at <= ?
+                  AND estimated_cost IS NOT NULL
+                """,
+                (serialized_since, serialized_until),
+            )
+            try:
+                costs = [Decimal(cost_row[0]) for cost_row in cost_rows]
+            except (InvalidOperation, TypeError, ValueError) as error:
+                raise MetricsStoreDataError("malformed estimated cost") from error
+
+        attempt_count = row["attempt_count"]
+        success_count = row["success_count"]
+        return MetricsSummary(
+            window=MetricsWindow(since=since, until=until),
+            request_count=row["request_count"],
+            attempt_count=attempt_count,
+            success_count=success_count,
+            failure_count=attempt_count - success_count,
+            success_rate=(success_count / attempt_count if attempt_count else None),
+            average_latency_ms=row["average_latency_ms"],
+            estimated_total_cost=(sum(costs, Decimal(0)) if costs else None),
+            providers_count=row["providers_count"],
+            models_count=row["models_count"],
+            routing_decision_count=routing_decision_count,
+        )
+
+    def list_recent_failures(self, limit: int) -> list[RecentFailure]:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT request_id, provider, model, finished_at, created_at,
+                       latency_ms, error_type
+                FROM attempts
+                WHERE success = 0
+                ORDER BY finished_at DESC, id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [_recent_failure_from_row(row) for row in rows]
+
 
 def _serialize_datetime(value: datetime) -> str:
     if value.tzinfo is None or value.utcoffset() is None:
@@ -458,6 +550,25 @@ def _routing_decision_from_row(row: sqlite3.Row) -> RoutingDecision:
         )
     except (KeyError, TypeError, ValueError, ValidationError) as error:
         raise MetricsStoreDataError("malformed routing decision row") from error
+
+
+def _recent_failure_from_row(row: sqlite3.Row) -> RecentFailure:
+    try:
+        stored_error_type = row["error_type"]
+        safe_error_type = (
+            stored_error_type if stored_error_type in SAFE_ERROR_TYPES else "unknown_error"
+        )
+        return RecentFailure(
+            request_id=row["request_id"],
+            provider=row["provider"],
+            model=row["model"],
+            finished_at=row["finished_at"],
+            created_at=row["created_at"],
+            latency_ms=row["latency_ms"],
+            error_type=safe_error_type,
+        )
+    except (KeyError, TypeError, ValueError, ValidationError) as error:
+        raise MetricsStoreDataError("malformed failure row") from error
 
 
 def _nearest_rank(values: Sequence[float], percentile: float) -> float | None:

@@ -138,6 +138,23 @@ actually returned the response after any fallback. Scores are internal routing i
 configured baselines and metrics measured by this local ModelPilot installation. They are not live
 provider benchmarks. Explicit-model requests include `served_by` but no automatic routing explanation.
 
+### Read-only metrics API
+
+The V0.2 development branch exposes persisted local metrics through four read-only endpoints:
+
+- `GET /v1/metrics/summary?hours=24` — distinct requests, attempts, outcomes, latency,
+  estimated cost, providers, models, and routing decisions, limited to 1–168 hours
+- `GET /v1/metrics/providers` — current seven-day/100-attempt provider-model snapshots;
+  optional exact `provider` and `model` filters are supported
+- `GET /v1/metrics/routing-decisions?limit=20` — persisted structured routing evidence
+- `GET /v1/metrics/failures?limit=20` — recent standardized failure categories
+
+Decision and failure limits are capped at 100. Decimal cost values are returned as exact JSON fixed-point
+strings and remain `null` when unavailable. Costs are estimates based on configured pricing and real
+provider-reported usage, not billing data. These endpoints never return prompts, completions,
+credentials, authorization headers, or raw provider error messages. No metrics or pricing write endpoint
+is exposed.
+
 ## Environment variables
 
 | Variable | Purpose | Default |

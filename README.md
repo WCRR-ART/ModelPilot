@@ -71,6 +71,8 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. Set `NEXT_PUBLIC_MODELPILOT_API_URL` if the API runs elsewhere.
+The dashboard reads the summary, provider metrics, recent routing decisions, and recent failures from
+the read-only metrics API. Each section reports loading, empty, unavailable, and error states independently.
 
 ## API example
 

@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from modelpilot.health.manager import HealthPersistenceError, ProviderHealthManager
 from modelpilot.logging import RequestLogStore
 from modelpilot.metrics import (
     MetricsStore,
@@ -35,10 +36,12 @@ class GatewayService:
         router: ModelRouter,
         logs: RequestLogStore,
         metrics: MetricsStore | None = None,
+        health: ProviderHealthManager | None = None,
     ) -> None:
         self.router = router
         self.logs = logs
         self.metrics = metrics
+        self.health = health
 
     async def complete(self, request: ChatCompletionRequest) -> ChatCompletionPayload:
         request_id = f"req_{uuid4().hex}"
@@ -71,6 +74,7 @@ class GatewayService:
 
             if isinstance(provider_result, ProviderOutcome):
                 self._record_provider_attempt(provider_result, request_id, attempt_index)
+                self._update_provider_health(provider_result, request_id)
                 if not provider_result.success:
                     attempts.append(
                         AttemptLog(
@@ -141,6 +145,17 @@ class GatewayService:
         if routing is not None:
             self._record_routing_decision(routing)
         raise AllProvidersFailed(request_id)
+
+    def _update_provider_health(self, outcome: ProviderOutcome, request_id: str) -> None:
+        if self.health is None:
+            return
+        try:
+            self.health.update(outcome)
+        except HealthPersistenceError:
+            logger.warning("health persistence failed for request %s", request_id)
+        except ValueError:
+            # OPEN-before-cooldown and stale timestamps retain the domain contract.
+            logger.warning("health transition rejected for request %s", request_id)
 
     def _record_routing_decision(self, explanation: RoutingExplanation) -> None:
         if self.metrics is None:

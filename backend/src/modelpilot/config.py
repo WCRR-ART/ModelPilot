@@ -8,6 +8,8 @@ class Settings(BaseModel):
     cors_origins: list[str] = ["http://localhost:3000"]
     request_log_limit: int = Field(default=500, ge=1, le=10_000)
     metrics_db_path: Path = Path("./data/modelpilot.db")
+    circuit_failure_threshold: int = Field(default=3, ge=1)
+    circuit_cooldown_seconds: int = Field(default=60, ge=0)
 
     openai_api_key: str | None = Field(default=None, exclude=True, repr=False)
     openai_base_url: str = "https://api.openai.com/v1"
@@ -27,6 +29,8 @@ class Settings(BaseModel):
         return cls(
             cors_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
             request_log_limit=int(os.getenv("MODELPILOT_REQUEST_LOG_LIMIT", "500")),
+            circuit_failure_threshold=int(os.getenv("MODELPILOT_CIRCUIT_FAILURE_THRESHOLD", "3")),
+            circuit_cooldown_seconds=int(os.getenv("MODELPILOT_CIRCUIT_COOLDOWN_SECONDS", "60")),
             metrics_db_path=Path(
                 os.getenv("MODELPILOT_METRICS_DB", "./data/modelpilot.db")
             ),

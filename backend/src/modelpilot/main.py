@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from pathlib import Path
 
 import httpx
@@ -8,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from modelpilot import __version__
 from modelpilot.config import Settings
+from modelpilot.health import ProviderHealthStore
+from modelpilot.health.manager import ProviderHealthManager
 from modelpilot.logging import RequestLogStore
 from modelpilot.metrics import MetricsStore, SQLiteMetricsStore
 from modelpilot.metrics.api import router as metrics_router
@@ -27,6 +30,7 @@ def build_gateway(
     settings: Settings,
     client: httpx.AsyncClient,
     metrics: MetricsStore | None = None,
+    health_store: ProviderHealthStore | None = None,
 ) -> GatewayService:
     providers = {
         "openai": OpenAIProvider(settings.openai_api_key, settings.openai_base_url, client),
@@ -34,6 +38,16 @@ def build_gateway(
         "deepseek": DeepSeekProvider(settings.deepseek_api_key, settings.deepseek_base_url, client),
     }
     metrics_store = metrics if metrics is not None else build_metrics_store(settings)
+    if health_store is None and isinstance(metrics_store, ProviderHealthStore):
+        health_store = metrics_store
+    health = (
+        ProviderHealthManager(
+            health_store,
+            failure_threshold=settings.circuit_failure_threshold,
+            cooldown=timedelta(seconds=settings.circuit_cooldown_seconds),
+        )
+        if health_store is not None else None
+    )
     router = ModelRouter(
         providers,
         default_candidates(
@@ -47,6 +61,7 @@ def build_gateway(
         router,
         RequestLogStore(settings.request_log_limit),
         metrics_store,
+        health,
     )
 
 

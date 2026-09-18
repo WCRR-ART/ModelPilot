@@ -212,6 +212,8 @@ Metrics 数据库**不会**持久化 prompt、completion、API Key、Authorizati
 | `MODELPILOT_CORS_ORIGINS` | Dashboard 允许的来源，多个值用逗号分隔 | `http://localhost:3000` |
 | `MODELPILOT_REQUEST_LOG_LIMIT` | 进程内请求日志最大条数 | `500` |
 | `MODELPILOT_METRICS_DB` | SQLite metrics 数据库路径 | `./data/modelpilot.db` |
+| `MODELPILOT_CIRCUIT_FAILURE_THRESHOLD` | 打开 circuit 的连续计数失败阈值；整数 >= 1 | `3` |
+| `MODELPILOT_CIRCUIT_COOLDOWN_SECONDS` | 冷却秒数；整数 >= 0 | `60` |
 | `OPENAI_API_KEY` | 启用 OpenAI Provider | 未设置 |
 | `OPENAI_BASE_URL` / `OPENAI_MODEL` | OpenAI 地址与自动候选模型 | 官方地址 / `gpt-4o-mini` |
 | `GEMINI_API_KEY` | 启用 Gemini Provider | 未设置 |
@@ -221,6 +223,11 @@ Metrics 数据库**不会**持久化 prompt、completion、API Key、Authorizati
 | `NEXT_PUBLIC_MODELPILOT_API_URL` | Dashboard 使用的后端地址 | `http://localhost:8000` |
 
 上述变量名和默认值与 `.env.example` 一致，其中 API Key 特意留空。
+
+V03-003 使用每次标准化 ProviderOutcome 的 UTC 完成时间更新健康状态。
+非法 circuit 配置在加载阶段报错。健康记录与 attempt 记录独立隔离故障，写入失败不改变成功响应。
+当前 Router 尚未过滤 OPEN 状态；已有 OPEN/冷却期或时间顺序规则拒绝转换时，保留健康状态并记录 warning，
+attempt metrics 仍然照常记录。
 
 ## V0.2 限制
 

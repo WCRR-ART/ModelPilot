@@ -224,6 +224,8 @@ process environment.
 | `MODELPILOT_CORS_ORIGINS` | Comma-separated allowed Dashboard origins | `http://localhost:3000` |
 | `MODELPILOT_REQUEST_LOG_LIMIT` | Maximum in-memory request-log records | `500` |
 | `MODELPILOT_METRICS_DB` | SQLite metrics database path | `./data/modelpilot.db` |
+| `MODELPILOT_CIRCUIT_FAILURE_THRESHOLD` | Consecutive counted failures before OPEN; integer >= 1 | `3` |
+| `MODELPILOT_CIRCUIT_COOLDOWN_SECONDS` | Circuit cooldown in seconds; integer >= 0 | `60` |
 | `OPENAI_API_KEY` | Enables the OpenAI adapter | unset |
 | `OPENAI_BASE_URL` / `OPENAI_MODEL` | OpenAI endpoint and automatic candidate | official URL / `gpt-4o-mini` |
 | `GEMINI_API_KEY` | Enables the Gemini adapter | unset |
@@ -233,6 +235,12 @@ process environment.
 | `NEXT_PUBLIC_MODELPILOT_API_URL` | Backend URL used by the Dashboard | `http://localhost:8000` |
 
 The names and defaults above match `.env.example`; its API-key values are intentionally empty.
+
+V03-003 records health after each normalized provider outcome using its UTC completion time.
+Invalid circuit configuration fails during settings loading. Health and attempt persistence
+fail independently; neither changes a successful provider response. Routing does not yet
+filter OPEN circuits. Outcomes rejected by the existing OPEN/cooldown or timestamp contract
+leave health unchanged and produce a warning; attempt metrics are still recorded.
 
 ## V0.2 limitations
 

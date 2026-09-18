@@ -1,0 +1,26 @@
+{
+  "suite_id": "modelpilot-smoke",
+  "version": "1",
+  "name": "ModelPilot original smoke fixture",
+  "description": "Self-authored synthetic cases for schema/loader and future runner checks only. Not a scientific benchmark, quality ranking or leaderboard. 自建测试，无用户数据。",
+  "cases": [
+    {
+      "case_id": "literal-word",
+      "category": "instruction_following",
+      "messages": [{"role": "user", "content": "Reply with exactly PINE, with no other text."}],
+      "evaluator": {"kind": "exact_match", "expected_text": "PINE"}
+    },
+    {
+      "case_id": "small-sum",
+      "category": "math",
+      "messages": [{"role": "user", "content": "What is 17 + 25? Reply with only the number."}],
+      "evaluator": {"kind": "numeric_tolerance", "expected_number": 42, "tolerance": 0}
+    },
+    {
+      "case_id": "json-flag",
+      "category": "structured_output",
+      "messages": [{"role": "user", "content": "Return only a JSON object with one key, ready, whose value is true."}],
+      "evaluator": {"kind": "json_equal", "expected_json": "{\"ready\":true}"}
+    }
+  ]
+}

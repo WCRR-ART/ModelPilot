@@ -21,8 +21,18 @@ from modelpilot.benchmarks.results import (
     BenchmarkTarget,
 )
 from modelpilot.benchmarks.runner import BenchmarkRunner
+from modelpilot.benchmarks.sqlite_store import SQLiteBenchmarkStore
+from modelpilot.benchmarks.store import (
+    BenchmarkStore,
+    BenchmarkStoreDataError,
+    DuplicateBenchmarkRunError,
+)
 
 __all__ = [
+    "BenchmarkStore",
+    "BenchmarkStoreDataError",
+    "DuplicateBenchmarkRunError",
+    "SQLiteBenchmarkStore",
     "BenchmarkCaseResult",
     "BenchmarkRun",
     "BenchmarkRunConfig",

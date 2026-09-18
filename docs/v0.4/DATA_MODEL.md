@@ -58,6 +58,38 @@ provider/model. Results never modify definitions. Repeats have separate run IDs;
 new unique cases. Provider failure, invalid response, evaluator error and incomplete run remain
 distinguishable. Missing aggregates use null, never invented zero measurements.
 
-Persistence and schema are intentionally deferred. V04-001 uses no store, adds no tables and leaves
-SQLite version 3 unchanged. Later migration design must preserve V0.2/V0.3 data and keep benchmark
-records separate from production metrics and health. Runtime APIs and source version stay unchanged.
+## SQLite persistence (implemented in V04-004)
+
+Schema 4 adds exactly two tables to the existing application database:
+
+| Table | Stored fields and keys |
+| --- | --- |
+| benchmark_runs | run_id primary key; suite_id, suite_version, suite_fingerprint; provider/model; started_at/finished_at; status; total_cases/completed_cases/execution_failed_cases; terminated_early; max_cases/case_timeout_seconds/temperature/max_tokens |
+| benchmark_case_results | run_id foreign key; case_id, case_index, category; execution_status; provider/model; latency_ms; nullable input/output/total_tokens; error_type; nullable evaluation_score/evaluation_passed/evaluator_kind/evaluator_version/evaluation_reason |
+
+Case primary key is (run_id, case_index), with UNIQUE(run_id, case_id); reads restore contiguous
+zero-based case_index order, never alphabetical case_id order. The only added query index is
+benchmark_runs(started_at DESC, run_id DESC), supporting bounded newest-first listing. No speculative
+provider/suite analytics indexes are added. All values use SQL parameters; no pickle or arbitrary blob.
+
+Completed wrong answers persist score=0/passed=0; execution failures persist all evaluation fields
+as SQL NULL. Missing usage stays NULL. Booleans serialize as 0/1 and are strictly checked on restore.
+UTC aware timestamps serialize with microsecond precision. Domain validation checks restored enums,
+scores, counts, identities, time ordering and target consistency. Database constraints enforce keys,
+foreign keys, nonnegative fields and evaluation/execution shape. Invalid/corrupt records fail explicitly.
+
+The existing model has no separate termination_reason field: terminal authentication_error on the
+last result plus terminated_early preserves the reason without redundant metadata. Generation config
+and suite fingerprint round-trip verbatim; the store never recalculates the fingerprint. Different
+fingerprints for the same suite identity remain distinguishable historical facts; no suite registry
+or global definition-identity collision enforcement is introduced.
+
+BenchmarkStore offers save_run, get_run (complete run or None), list_runs (complete runs; default 20,
+integer limit 1..100, SQL LIMIT), and list_case_results (ordered tuple, empty for missing run).
+Only selected runs are restored; reads use one consistent SQLite snapshot. Corrupt case ordering,
+missing cases, invalid metadata and orphan results fail instead of being silently repaired.
+
+No prompt, expected answer, full suite JSON, raw output, error message or credential is stored. Suite
+definitions remain repository/user-managed files: retain their exact version to replay a historical
+run. A fingerprint identifies content but does not recover the definition. Runs are immutable history;
+repeats need new IDs. Production APIs and source version remain unchanged; QualitySnapshot is deferred.

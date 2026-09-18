@@ -42,7 +42,7 @@ def test_fresh_database_protocol_schema_and_missing_health(tmp_path: Path) -> No
     assert store.get_health("missing", "missing") is None
     assert store.list_health() == []
     with closing(sqlite3.connect(path)) as connection:
-        assert connection.execute("SELECT version FROM schema_version").fetchone() == (3,)
+        assert connection.execute("SELECT version FROM schema_version").fetchone() == (4,)
         assert connection.execute("PRAGMA journal_mode").fetchone() == ("wal",)
         columns = {row[1] for row in connection.execute("PRAGMA table_info(provider_health)")}
         assert columns == set(ProviderHealth.model_fields)
@@ -152,7 +152,7 @@ def test_migration_preserves_existing_data_and_is_repeatable(tmp_path: Path, ver
             decision if version == 2 else None
         )
         with migrated._connect() as connection:
-            assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == 3
+            assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == 4
         migrated.upsert_health(snapshot(CircuitState.OPEN))
     assert migrated.list_health() == [snapshot(CircuitState.OPEN)]
 

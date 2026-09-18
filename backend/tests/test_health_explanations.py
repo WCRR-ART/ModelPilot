@@ -92,7 +92,7 @@ def test_filtered_plus_fallback_selected_and_served(tmp_path):
     assert providers[0].calls == 0
     reopened = SQLiteMetricsStore(store._database)
     assert reopened.get_routing_decision(exp.request_id).explanation == exp
-    assert SCHEMA_VERSION == 3
+    assert SCHEMA_VERSION == 4
 
 
 @pytest.mark.parametrize("error", [None, ProviderErrorType.TIMEOUT])

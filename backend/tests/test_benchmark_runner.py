@@ -376,7 +376,7 @@ def test_production_database_api_and_open_circuit_unchanged(tmp_path, monkeypatc
                     "SELECT version FROM schema_version WHERE singleton = 1"
                 ).fetchone()[0]
                 == SCHEMA_VERSION
-                == 3
+                == 4
             )
             return tuple(connection.iterdump())
 

@@ -92,7 +92,7 @@ def test_effective_state_boundaries_read_only(context, monkeypatch, seconds, sta
             assert value == getattr(health, field)
         assert row["last_success_at"] is None
     assert store.list_health() == before
-    assert SCHEMA_VERSION == 3
+    assert SCHEMA_VERSION == 4
 
 
 def test_closed_success_timestamps(context):

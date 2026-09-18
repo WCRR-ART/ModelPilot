@@ -255,4 +255,4 @@ def test_smoke_loads_without_provider_calls_or_schema_change(monkeypatch):
     suite = load_benchmark_suite(root / "benchmarks/suites/smoke-v1.json")
     assert suite.identity == ("modelpilot-smoke", "1")
     assert 2 <= len(suite.cases) <= 5
-    assert SCHEMA_VERSION == 3
+    assert SCHEMA_VERSION == 4

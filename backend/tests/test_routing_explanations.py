@@ -356,7 +356,7 @@ def test_new_database_uses_schema_two_with_routing_table(tmp_path: Path) -> None
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'routing_decisions'"
         ).fetchone()
 
-    assert version == SCHEMA_VERSION == 3
+    assert version == SCHEMA_VERSION == 4
     assert table == ("routing_decisions",)
 
 
@@ -385,6 +385,9 @@ def test_v1_to_v2_migration_preserves_attempts_and_pricing(tmp_path: Path) -> No
     old_store.upsert_pricing(pricing)
     with sqlite3.connect(database) as connection:
         connection.execute("DROP TABLE routing_decisions")
+        connection.execute("DROP TABLE benchmark_case_results")
+        connection.execute("DROP TABLE benchmark_runs")
+        connection.execute("DROP TABLE provider_health")
         connection.execute("UPDATE schema_version SET version = 1 WHERE singleton = 1")
 
     migrated = SQLiteMetricsStore(database)

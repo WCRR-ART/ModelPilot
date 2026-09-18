@@ -253,7 +253,7 @@ def test_application_shared_coordinator_and_no_schema_change(store):
                 assert app_client.app.state.gateway.probes is coordinator
 
     asyncio.run(run())
-    assert SCHEMA_VERSION == 3
+    assert SCHEMA_VERSION == 4
     assert SQLiteMetricsStore(store._database).get_health("openai", "openai-model") == opened()
     with store._connect() as connection:
         assert "probe_in_flight" not in {

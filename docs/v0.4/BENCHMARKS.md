@@ -93,8 +93,31 @@ It neither changes health/probe state nor writes production attempts, routing de
 Only outcome token usage (including nulls), latency and standardized error enum are retained. No
 raw response, actual output, headers, error message, credentials, duplicate prompts or expected
 answers are captured. Raw output is transiently evaluated; there is no unlimited output retention.
-No cost estimation, persistence, quality aggregation, HTTP endpoint or Dashboard is added here.
+The runner performs no cost estimation, persistence, quality aggregation, HTTP or Dashboard work.
 
 Run identity is a UUID by default; clock/id_factory can be injected. Times are aware UTC. A SHA-256
 fingerprint of the validated suite's UTF-8 model JSON pins content, order and evaluator configuration
 (not the original file's formatting). The definition must remain available separately for later replay.
+
+## Explicit saving (V04-004)
+
+SQLiteBenchmarkStore accepts the same database path as SQLiteMetricsStore. For programmatic use:
+
+```python
+from modelpilot.benchmarks import SQLiteBenchmarkStore
+from modelpilot.config import Settings
+
+settings = Settings.from_env()
+settings.metrics_db_path.parent.mkdir(parents=True, exist_ok=True)
+store = SQLiteBenchmarkStore(settings.metrics_db_path)
+# run = await runner.run(suite, target, provider)
+store.save_run(run)
+restored = store.get_run(run.run_id)
+recent = store.list_runs(limit=20)
+```
+
+Execution and saving are separate; failure to save raises an exception. Historical run IDs cannot be
+overwritten. The same file is upgraded to schema 4, with separate benchmark tables; no production
+attempt/health/routing/metrics writes are performed. Back up before migration; see ARCHITECTURE.md
+for rollback limitations. Definitions and raw answers are not stored. No benchmark API/CLI, quality
+aggregation or routing integration is introduced in this task.

@@ -3,6 +3,9 @@
 Each task is one focused commit or pull request. Dependencies are explicit so circuit behavior
 is testable before it affects production routing.
 
+All eight local implementation tasks are complete. See [COMPLETION.md](COMPLETION.md) for
+implementation/test evidence and release gates. This does not mean v0.3.0 has been published.
+
 ## V03-001 — Provider Health Domain Model & State Machine
 
 - **Goal:** Define immutable provider/model health snapshots, failure classification, and

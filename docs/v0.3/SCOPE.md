@@ -13,7 +13,7 @@ traffic, then allow a bounded recovery probe after a cooldown.
 - Count only normalized failure categories that can indicate provider unavailability.
 - Keep thresholds and cooldowns configurable outside the domain model.
 - Make every transition deterministic with an injected timezone-aware timestamp.
-- Persist health state safely and make routing exclude open circuits in later tasks.
+- Persist health state safely and exclude open circuits from automatic routing.
 - Preserve explicit fallback behavior and the OpenAI-compatible API contract.
 - Expose bounded health observability after routing integration is stable.
 
@@ -39,7 +39,7 @@ V0.3 does not add:
 
 - Existing OpenAI-compatible request and response fields remain unchanged.
 - Existing confidence-blended scoring remains deterministic.
-- A circuit decision may filter candidates only after the dedicated integration task.
+- Circuit eligibility filters automatic candidates without changing the scoring formula.
 - Metrics or health persistence failures must not turn a successful inference into failure.
 - No prompts, completions, API keys, authorization headers, or raw provider bodies are stored.
 
@@ -51,4 +51,3 @@ V0.3 does not add:
 - Successful probes close the circuit; failed probes restart the cooldown.
 - Health decisions are observable without exposing sensitive request data.
 - V0.2 regression tests, Ruff, frontend lint, typecheck, build, and security checks pass.
-

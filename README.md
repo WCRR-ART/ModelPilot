@@ -12,20 +12,37 @@ provider selection inside the gateway. It ranks configured models deterministica
 next ranked provider after a failure, and records local operational evidence so later decisions can
 use measured latency, reliability, and estimated cost.
 
-## V0.2 features
+## V0.3 features
+
+Source version: **0.3.0 (release preparation)**. The latest published stable release remains
+v0.2.0 until the v0.3.0 tag and GitHub Release are published.
+
+### Gateway
 
 - FastAPI gateway with `GET /health` and OpenAI-compatible `POST /v1/chat/completions`
 - OpenAI, Gemini, and DeepSeek adapters
 - `model: "auto"` routing and deterministic ordered fallback
+
+### Routing
 - Real provider latency, success/failure outcomes, and nullable token usage
 - Decimal cost estimates from configured pricing metadata and provider-reported token usage
 - SQLite persistence for attempts, pricing metadata, and structured routing decisions
 - Confidence-blended latency, reliability, and cost signals
 - Static quality signal; no benchmark-derived quality claims
 - Structured route explanations that distinguish the selected route from the provider that served it
+
+### Observability
 - Bounded, read-only Metrics API
 - Next.js Dashboard backed by real local metrics
 - Bounded in-memory request logs at `GET /v1/logs`
+
+### Provider Health
+
+- Persisted provider/model circuit state: CLOSED / OPEN / HALF_OPEN
+- Configurable failure threshold and cooldown, automatic OPEN isolation before auto scoring
+- Single-process, single-flight recovery probes and automatic recovery on success
+- Structured health-aware route explanations with unscored excluded candidates
+- Read-only Provider Health API and Dashboard circuit status
 
 ## Tech stack
 
@@ -38,15 +55,15 @@ use measured latency, reliability, and estimated cost.
 ```text
 Client
   -> POST /v1/chat/completions
-  -> deterministic confidence-blended Router
+  -> circuit eligibility -> deterministic confidence-blended Router
   -> OpenAI | Gemini | DeepSeek
   -> ProviderOutcome
   -> AttemptRecord + estimated cost
-  -> SQLite metrics + RoutingDecision
+  -> SQLite metrics + RoutingDecision + ProviderHealth
   -> OpenAI-compatible response + modelpilot explanation
 
-SQLite metrics
-  -> read-only Metrics API
+SQLite metrics + health / process-local probe status
+  -> read-only Metrics and Provider Health APIs
   -> Next.js Dashboard
 ```
 
@@ -72,11 +89,16 @@ In another terminal:
 ```bash
 cd frontend
 npm ci
+export NEXT_PUBLIC_MODELPILOT_API_URL=http://localhost:8000
+# PowerShell: $env:NEXT_PUBLIC_MODELPILOT_API_URL="http://localhost:8000"
 npm run dev
 ```
 
 The API and Dashboard default to `http://localhost:8000` and `http://localhost:3000`. Set
-`NEXT_PUBLIC_MODELPILOT_API_URL` when the API runs elsewhere.
+`NEXT_PUBLIC_MODELPILOT_API_URL` when the API runs elsewhere. Next.js does not load the repository-root
+`.env`: export this public URL as above or put only that setting in `frontend/.env.local`.
+Without it the Dashboard uses same-origin API paths; configure a reverse proxy for that deployment.
+The public URL is captured at frontend build time and must not contain credentials.
 
 ## API example
 
@@ -109,11 +131,12 @@ Cold start
   -> deterministic dynamic ranking
 ```
 
-The Router filters providers without API keys, reads one frozen snapshot per provider/model, applies
+The auto Router filters providers without API keys and OPEN circuits, reads one snapshot per provider/model, applies
 the normalized request preferences, and ranks candidates once. Fallback follows that fixed order;
-the request is not re-ranked between attempts.
+the request is not re-ranked between attempts. Eligibility is checked again immediately before a call,
+and a HALF_OPEN candidate must acquire the process-local probe lease.
 
-- **Quality:** always the configured static baseline in V0.2.
+- **Quality:** always the configured static baseline.
 - **Latency:** blended from the configured baseline and measured p50 latency when available.
 - **Reliability:** blended from the configured baseline and smoothed measured success rate.
 - **Cost:** blended from the configured baseline and p50 estimated request cost when priced samples exist.
@@ -143,7 +166,7 @@ actually returned the response after fallback.
     "request_id": "req_...",
     "served_by": {"provider": "gemini", "model": "gemini-2.0-flash"},
     "routing": {
-      "routing_version": "v0.2",
+      "routing_version": "v0.3",
       "selected_provider": "deepseek",
       "selected_model": "deepseek-chat",
       "served_provider": "gemini",
@@ -165,17 +188,55 @@ actually returned the response after fallback.
 ```
 
 Explicit-model requests remain deterministic and include `served_by`, but do not create an automatic
-routing explanation.
+routing explanation. They bypass automatic health filtering and do not silently switch providers.
+The example above is an abbreviated structure, not measured benchmark data. V0.3 also includes
+`health` evidence on candidates and `excluded_candidates`; excluded entries have no rank or score.
+
+## Circuit breaker
+
+```text
+CLOSED -> counted failures reach threshold -> OPEN
+OPEN -> cooldown expires -> HALF_OPEN (eligible for a recovery probe)
+HALF_OPEN -> probe success -> CLOSED
+HALF_OPEN -> counted probe failure -> OPEN (new cooldown)
+```
+
+Defaults are **3 consecutive counted failures** and **60 seconds cooldown**, both configurable.
+Counted errors: `timeout`, `connection_error`, `rate_limit`, `provider_error`, `invalid_response`,
+and `unknown_error`. `authentication_error` remains observable in attempts but does not count
+toward circuit failure or open a circuit. A successful call resets the failure count.
+
+Auto routing skips OPEN circuits and returns the existing 503 unavailable response if none are
+eligible. After cooldown, recovery is request-driven: one in-flight probe per provider/model;
+other requests skip that candidate and use alternatives. No background checker runs.
+
+**Probe coordination is single-process only.** Multiple workers or instances do not share leases;
+this is not a distributed circuit breaker. Use one process for the single-flight guarantee.
+SQLite preserves health across restarts; runtime probe leases are not persisted.
+Health-store read failures are fail-open for inference with sanitized warnings. Attempt and health
+writes fail independently and cannot replace a successful inference response with an error.
+
+## Read-only Provider Health API
+
+`GET /v1/health/providers` reports configured provider/model identity, effective state, eligibility,
+reason, consecutive failures, cooldown, last success/failure, and `probe_in_flight`.
+It is distinct from service liveness at `GET /health`. Expired OPEN records are shown as effectively
+HALF_OPEN without a database write or probe claim. Missing records use CLOSED / health_unknown;
+disabled providers are omitted. Timestamps are UTC; missing data remains null. Store failures return
+503, not fabricated healthy data. Snapshots do not guarantee admission of the next request.
+There are no reset, manual open/close, or manual probe endpoints.
 
 ## Metrics and storage
 
 Completed attempts are stored in SQLite at `./data/modelpilot.db` by default. Aggregates use at most
 the newest **100 attempts per provider/model within the previous 7 days**. This is a query window,
-not automatic database retention; older durable records are not deleted by V0.2.
+not automatic database retention; older durable records are not automatically deleted.
 
 Token counts remain `null` when the provider omits or returns invalid usage. Failures are recorded with
-a bounded, sanitized error category. The schema version is 2 and upgrades a version-1 database by
-adding routing-decision storage while preserving attempts and pricing.
+a bounded, sanitized error category. Schema version 3 upgrades v1 through v2 to v3, or v2 to v3,
+adding provider health while preserving attempts, pricing and routing decisions. Old V0.2 explanation
+JSON without health fields remains readable. SQLite uses WAL; the directory is created automatically.
+Relative database paths resolve from the backend process working directory.
 
 ### Estimated cost
 
@@ -205,17 +266,20 @@ values remain `null`. No metrics or pricing write endpoint is exposed.
 
 ## Dashboard
 
-The Dashboard reads the health and four metrics endpoints in parallel. It displays requests, attempts,
+The Dashboard reads service health, Provider Health, and four metrics endpoints in parallel. It displays requests, attempts,
 success rate, average latency, estimated cost, provider metrics, routing decisions, and recent failures.
 Loading, empty, error, and unavailable states are independent, and a manual Refresh action does not
 enable polling. Estimated costs are labelled as estimates; selected and served providers are separate.
+Provider Health shows Healthy / Open / Recovering, consecutive failures, UTC cooldown deadlines,
+probe readiness or progress, and last success/failure. No-record providers are explicitly labeled;
+null timestamps display an em dash. Refresh reloads both metrics and health, without write controls.
 
 ## Privacy
 
-The metrics database does **not** persist prompts, completions, API keys, authorization headers, or raw
+The metrics and health database does **not** persist prompts, completions, API keys, authorization headers, or raw
 provider error bodies. Request IDs, provider/model names, timestamps, latency, bounded error categories,
 nullable usage, cost estimates, and routing metadata are persisted. Provider credentials remain in the
-process environment.
+process environment. Route and health explanations do not expose credentials or secrets.
 
 ## Environment variables
 
@@ -232,28 +296,28 @@ process environment.
 | `GEMINI_BASE_URL` / `GEMINI_MODEL` | Gemini endpoint and automatic candidate | official URL / `gemini-2.0-flash` |
 | `DEEPSEEK_API_KEY` | Enables the DeepSeek adapter | unset |
 | `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | DeepSeek endpoint and automatic candidate | official URL / `deepseek-chat` |
-| `NEXT_PUBLIC_MODELPILOT_API_URL` | Backend URL used by the Dashboard | `http://localhost:8000` |
+| `NEXT_PUBLIC_MODELPILOT_API_URL` | Backend URL used by the Dashboard | template: `http://localhost:8000`; unset: same-origin |
 
 The names and defaults above match `.env.example`; its API-key values are intentionally empty.
 
-V03-003 records health after each normalized provider outcome using its UTC completion time.
+Health is recorded after each normalized provider outcome using its UTC completion time.
 Invalid circuit configuration fails during settings loading. Health and attempt persistence
-fail independently; neither changes a successful provider response. Routing does not yet
-filter OPEN circuits. Outcomes rejected by the existing OPEN/cooldown or timestamp contract
+fail independently; neither changes a successful provider response. Auto routing filters OPEN
+circuits. Outcomes rejected by the existing OPEN/cooldown or timestamp contract
 leave health unchanged and produce a warning; attempt metrics are still recorded.
 
-## V0.2 limitations
+## V0.3 limitations
 
-V0.2 intentionally has no authentication, multi-user or multi-tenant model, streaming, billing system,
-benchmark engine, ML/AI router, Redis, PostgreSQL, distributed deployment, circuit breaker, or real-time
-pricing synchronization. SQLite is intended for one local ModelPilot instance. Provider health is
-represented by completed local attempts rather than distributed active probes.
+V0.3 has no distributed circuit breaker, multi-process probe coordination, manual circuit controls,
+circuit event history, background health checker, authentication, multi-user/multi-tenant model,
+billing/payment, streaming, benchmark engine, ML/AI Router, Redis, PostgreSQL, additional provider
+expansion, or live pricing synchronization. SQLite is intended for one local ModelPilot instance.
 
 ## Storage rollback
 
-Back up the SQLite file before changing versions. V0.2 migrates schema v1 to v2 on open and rejects
-unknown newer schemas; it does not provide a down-migration. Rolling the application back to v0.1.0
-does not require deleting the database, but v0.1.0 will not use V0.2 metrics or routing decisions.
+Stop the application and back up SQLite (including any outstanding WAL data) before upgrading.
+V0.3 migrates schema v1/v2 to v3 and rejects unknown newer schemas; there is no down-migration.
+To roll back to V0.2, restore the pre-upgrade database backup; V0.2 cannot open a schema-v3 database.
 
 ## Validation
 

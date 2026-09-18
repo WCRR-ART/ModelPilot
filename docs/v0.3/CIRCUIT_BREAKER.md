@@ -56,10 +56,9 @@ provider call is eligible in that state.
 
 ## Probe semantics
 
-`HALF_OPEN` represents eligibility, not an unlimited traffic state. A later integration task
-must coordinate at most one in-flight recovery probe per provider/model pair in the supported
-single-process deployment. V03-001 deliberately does not implement locks, leases, or Router
-filtering.
+`HALF_OPEN` represents eligibility, not an unlimited traffic state. V03-005 coordinates at most
+one in-flight recovery probe per provider/model pair in the supported single-process deployment.
+The V03-001 domain itself remains free of locks, leases, and Router filtering.
 
 ## Determinism
 
@@ -68,7 +67,7 @@ same serialized snapshot. Re-evaluating an unchanged state at the same time is i
 
 ## V03-004 routing eligibility
 
-Automatic routing reads each configured provider/model health at most once per request,
+Automatic ranking reads each configured provider/model health at most once per ranking,
 using one injected evaluation timestamp. CLOSED and missing records are eligible. OPEN is
 excluded before scoring until the inclusive cooldown boundary; expired OPEN and HALF_OPEN
 are eligible without a score adjustment. Eligibility evaluation does not write state.
@@ -76,7 +75,7 @@ Completed outcomes continue to drive persisted transitions through the existing 
 
 Health read or validation failure logs a warning without exception content and fails open.
 Structured internal evidence includes eligibility, effective state, and a stable reason;
-excluded candidates have no fabricated score. HTTP explanations are unchanged in this task.
+excluded candidates have no fabricated score. V03-006 exposes this evidence in HTTP explanations.
 Per-key reads share a timestamp but are not an atomic cross-key database snapshot.
 
 Explicit model requests retain their existing exact model matching and fallback semantics;

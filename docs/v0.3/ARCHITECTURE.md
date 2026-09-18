@@ -37,7 +37,7 @@ normalized ProviderOutcome
           v
 +----------------------+       +----------------------+
 | Health state machine |------>| ProviderHealthStore  |
-| pure transitions     |       | SQLite (later task)  |
+| pure transitions     |       | SQLite schema 3      |
 +----------+-----------+       +----------+-----------+
            |                              |
            | immutable health snapshot    |
@@ -65,7 +65,7 @@ normalized ProviderOutcome
 - circuit-failure classification
 - time-driven and outcome-driven transitions
 
-The domain receives a failure threshold, cooldown duration, and timezone-aware `now` value.
+The domain model receives a failure threshold, cooldown duration, and timezone-aware `now` value.
 It does not read environment variables, call a database, inspect FastAPI requests, or invoke
 providers.
 
@@ -75,19 +75,19 @@ Health is keyed by `(provider, model)`, matching routing candidates and provider
 Consumers operate on immutable snapshots. The timestamp used for a routing decision is read
 once, so every candidate is evaluated against the same instant.
 
-## Request flow after integration
+## Integrated request flow
 
 1. Capture one timezone-aware decision timestamp.
 2. Load health snapshots for configured candidates.
 3. Advance expired `OPEN` snapshots to `HALF_OPEN` deterministically.
-4. Exclude `OPEN` candidates and enforce the half-open probe limit.
+4. Exclude `OPEN` candidates.
 5. Apply the existing V0.2 scoring to eligible candidates without changing its formula.
-6. Record each normalized provider outcome in metrics as today.
-7. Apply the corresponding health transition and persist the new snapshot.
-8. Continue existing fallback behavior using the remaining eligible candidates.
+6. Recheck eligibility immediately before each call and claim a lease for HALF_OPEN; skip busy probes.
+7. Record each normalized provider outcome in metrics, then independently update persisted health.
+8. Release any probe lease in finally and continue fallback using the remaining eligible candidates.
 
-V03-001 implements steps 3 and 7 only as pure domain operations. Persistence, routing, and
-probe coordination are separate tasks.
+V03-001 supplies pure transitions; V03-002 through V03-007 complete persistence, routing,
+probe coordination and read-only observability. V03-008 records final validation in COMPLETION.md.
 
 ## Failure isolation
 

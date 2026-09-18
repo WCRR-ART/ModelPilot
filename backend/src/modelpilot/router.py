@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from math import isfinite
 
-from modelpilot.health import CircuitState, ProviderHealthStore
+from modelpilot.health import ProviderHealthStore
 from modelpilot.health.eligibility import HealthEligibility, health_eligibility
 from modelpilot.metrics import (
     MetricsStore,
@@ -13,6 +13,7 @@ from modelpilot.metrics import (
     RoutingExplanation,
     RoutingSignal,
 )
+from modelpilot.metrics.models import ExcludedRoutingCandidate
 from modelpilot.providers import Provider
 from modelpilot.providers.base import sanitize_error_message
 from modelpilot.schemas import RoutingPreferences
@@ -103,18 +104,24 @@ class ModelRouter:
         preferences: RoutingPreferences,
         request_id: str,
     ) -> tuple[list[RankedCandidate], RoutingExplanation | None]:
-        ranked = self._rank(requested_model, preferences)
-        if requested_model != "auto" or not ranked:
+        evidence: dict[tuple[str, str], HealthEligibility] = {}
+        now = self.clock()
+        ranked = self._rank(requested_model, preferences, evidence=evidence, now=now)
+        if requested_model != "auto":
             return ranked, None
         explanation = RoutingExplanation(
             request_id=request_id,
-            routing_version="v0.2",
+            routing_version="v0.3",
             strategy="weighted_measured_v1",
-            selected_provider=ranked[0].candidate.provider,
-            selected_model=ranked[0].candidate.model,
-            selected=ranked[0].signal,
+            selected_provider=ranked[0].candidate.provider if ranked else None,
+            selected_model=ranked[0].candidate.model if ranked else None,
+            selected=ranked[0].signal if ranked else None,
             candidates=tuple(item.signal for item in ranked),
-            created_at=datetime.now(UTC),
+            created_at=now,
+            excluded_candidates=tuple(
+                ExcludedRoutingCandidate(provider=p, model=m, health=health)
+                for (p, m), health in sorted(evidence.items()) if not health.eligible
+            ),
         )
         return ranked, explanation
 
@@ -122,8 +129,12 @@ class ModelRouter:
         self,
         requested_model: str,
         preferences: RoutingPreferences,
+        *, evidence: dict[tuple[str, str], HealthEligibility] | None = None,
+        now: datetime | None = None,
     ) -> list[RankedCandidate]:
         weights = preferences.normalized()
+        if evidence is None:
+            evidence = {}
         available = [
             candidate
             for candidate in self.candidates
@@ -136,7 +147,7 @@ class ModelRouter:
         # Duplicate configuration must never cause a second attempt of the same pair.
         available = list({(item.provider, item.model): item for item in available}.values())
         if requested_model == "auto":
-            evidence = self.evaluate_health(available, now=self.clock())
+            evidence.update(self.evaluate_health(available, now=now or self.clock()))
             available = [
                 item for item in available if evidence[(item.provider, item.model)].eligible
             ]
@@ -160,7 +171,8 @@ class ModelRouter:
                 provider=item.provider,
                 score=item.score,
                 signal=item.signal.model_copy(
-                    update={"rank": rank, "selected": rank == 1}
+                    update={"rank": rank, "selected": rank == 1,
+                            "health": evidence.get((item.candidate.provider, item.candidate.model))}
                 ),
             )
             for rank, item in enumerate(ranked, start=1)
@@ -184,7 +196,7 @@ class ModelRouter:
                 # Do not log database errors, provider identifiers, or credential-bearing text.
                 logger.warning("routing health unavailable; using fail-open eligibility")
                 evidence[key] = HealthEligibility(
-                    eligible=True, state=CircuitState.CLOSED, reason="health_store_unavailable"
+                    eligible=True, state=None, reason="health_store_unavailable"
                 )
         return evidence
 

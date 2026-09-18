@@ -12,6 +12,8 @@ from pydantic import (
     model_validator,
 )
 
+from modelpilot.health.eligibility import HealthEligibility
+
 NonEmptyStr = Annotated[str, Field(min_length=1)]
 NonNegativeInt = Annotated[int, Field(ge=0)]
 PositiveInt = Annotated[int, Field(ge=1)]
@@ -130,6 +132,7 @@ class ModelPricing(MetricsModel):
 
 
 class RoutingSignal(MetricsModel):
+    health: HealthEligibility | None = None
     provider: NonEmptyStr
     model: NonEmptyStr
     quality_score: UnitScore
@@ -151,20 +154,48 @@ class RoutingSignal(MetricsModel):
         return self
 
 
+class ExcludedRoutingCandidate(MetricsModel):
+    provider: NonEmptyStr
+    model: NonEmptyStr
+    health: HealthEligibility
+
+
 class RoutingExplanation(MetricsModel):
     request_id: NonEmptyStr
     routing_version: NonEmptyStr = "v0.2"
     strategy: NonEmptyStr
-    selected_provider: NonEmptyStr
-    selected_model: NonEmptyStr
+    selected_provider: NonEmptyStr | None = None
+    selected_model: NonEmptyStr | None = None
     served_provider: NonEmptyStr | None = None
     served_model: NonEmptyStr | None = None
-    selected: RoutingSignal
-    candidates: tuple[RoutingSignal, ...] = Field(min_length=1)
+    selected: RoutingSignal | None = None
+    candidates: tuple[RoutingSignal, ...] = ()
+    excluded_candidates: tuple[ExcludedRoutingCandidate, ...] = ()
     created_at: AwareDatetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
     def selected_must_be_a_candidate(self) -> "RoutingExplanation":
+        ranked_keys = {(item.provider, item.model) for item in self.candidates}
+        if len(ranked_keys) != len(self.candidates):
+            raise ValueError("ranked candidates must be unique")
+        if any(item.health is not None and not item.health.eligible for item in self.candidates):
+            raise ValueError("ranked candidates must be eligible")
+        excluded_keys = [(item.provider, item.model) for item in self.excluded_candidates]
+        if ranked_keys.intersection(excluded_keys) or len(set(excluded_keys)) != len(excluded_keys):
+            raise ValueError("excluded candidates must be unique and not ranked")
+        if any(item.health.eligible for item in self.excluded_candidates):
+            raise ValueError("excluded candidates must be ineligible")
+        if not self.candidates:
+            if any(value is not None for value in (
+                self.selected, self.selected_provider, self.selected_model,
+                self.served_provider, self.served_model,
+            )):
+                raise ValueError("empty ranking cannot have selected or served candidates")
+            return self
+        if self.selected is None:
+            raise ValueError("nonempty ranking requires a selected candidate")
+        if self.selected != self.candidates[0]:
+            raise ValueError("selected candidate must be ranked first")
         selected_key = (self.selected.provider, self.selected.model)
         candidate_keys = [(item.provider, item.model) for item in self.candidates]
         if selected_key not in candidate_keys:
@@ -185,6 +216,31 @@ class RoutingExplanation(MetricsModel):
     def with_served_by(self, provider: str, model: str) -> "RoutingExplanation":
         values = self.model_dump()
         values.update(served_provider=provider, served_model=model)
+        return RoutingExplanation.model_validate(values)
+
+    def with_health_updates(
+        self, updates: dict[tuple[str, str], HealthEligibility]
+    ) -> "RoutingExplanation":
+        candidates = []
+        excluded = list(self.excluded_candidates)
+        for item in self.candidates:
+            health = updates.get((item.provider, item.model), item.health)
+            if health is not None and not health.eligible:
+                excluded.append(ExcludedRoutingCandidate(
+                    provider=item.provider, model=item.model, health=health,
+                ))
+            else:
+                candidates.append(item.model_copy(update={
+                    "health": health, "rank": len(candidates) + 1,
+                    "selected": not candidates,
+                }))
+        selected = candidates[0] if candidates else None
+        values = self.model_dump()
+        values.update(
+            candidates=candidates, excluded_candidates=excluded, selected=selected,
+            selected_provider=selected.provider if selected else None,
+            selected_model=selected.model if selected else None,
+        )
         return RoutingExplanation.model_validate(values)
 
 

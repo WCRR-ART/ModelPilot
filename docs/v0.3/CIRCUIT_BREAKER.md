@@ -111,5 +111,19 @@ retain fail-open behavior, so protection cannot be guaranteed while the health s
 
 Explicit model requests bypass automatic probe coordination. Leases are process-local only,
 not shared across workers or replicas, and disappear on process exit. No lease data is stored
-in SQLite and the schema remains version 3. External response explanation extensions remain
-the responsibility of V03-006.
+in SQLite and the schema remains version 3.
+
+## V03-006 explanations
+
+The existing modelpilot.routing extension now includes health evidence on ranked candidates
+and an excluded_candidates list without invented scores or ranks. Execution admission updates
+the final explanation before persistence/response: acquired probes are marked as executed,
+busy probes move to exclusions, and selected is the first remaining ranked candidate.
+Successful fallback still records the original eligible selection separately from served_by.
+Health-read failure remains fail-open, represented by a null state and
+health_store_unavailable. Cooldown timestamps and failure counts reflect the actual snapshot
+used for eligibility, not the resulting health state after the provider completes.
+
+New explanation version is v0.3; SQLite remains schema 3 and old v0.2 decisions remain readable.
+All-unavailable evidence is retained internally on the existing unavailable exception without
+changing its HTTP response. See DATA_MODEL.md for the exact compatibility rules.

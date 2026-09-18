@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 
 class NoProviderAvailable(RuntimeError):
-    pass
+    def __init__(self, message: str, routing: RoutingExplanation | None = None) -> None:
+        self.routing = routing
+        super().__init__(message)
 
 
 class _CandidateUnavailable(RuntimeError):
@@ -61,14 +63,17 @@ class GatewayService:
             request_id,
         )
         if not ranked:
-            raise NoProviderAvailable("no configured provider can serve the requested model")
+            raise NoProviderAvailable(
+                "no configured provider can serve the requested model", routing
+            )
 
         attempts: list[AttemptLog] = []
+        health_updates: dict[tuple[str, str], HealthEligibility] = {}
         for attempt_index, item in enumerate(ranked):
             attempt_started = perf_counter()
             try:
                 provider_result = await self._invoke_candidate(
-                    item, request, request_id, attempt_index
+                    item, request, request_id, attempt_index, health_updates
                 )
             except _CandidateUnavailable:
                 continue
@@ -126,6 +131,7 @@ class GatewayService:
                 selected_model=item.candidate.model,
             )
             if routing is not None:
+                routing = routing.with_health_updates(health_updates)
                 routing = routing.with_served_by(
                     item.candidate.provider, item.candidate.model
                 )
@@ -146,8 +152,12 @@ class GatewayService:
             result["modelpilot"].update(extension)
             return result
 
+        if routing is not None:
+            routing = routing.with_health_updates(health_updates)
         if not attempts:
-            raise NoProviderAvailable("no configured provider can serve the requested model")
+            raise NoProviderAvailable(
+                "no configured provider can serve the requested model", routing
+            )
         self._record(
             request_id=request_id,
             request=request,
@@ -173,17 +183,22 @@ class GatewayService:
         return HealthEligibility(
             eligible=lease is not None,
             state=CircuitState.HALF_OPEN,
+            probe=lease is not None,
+            cooldown_until=evidence.cooldown_until,
+            consecutive_failures=evidence.consecutive_failures,
             reason="half_open_probe_acquired" if lease else "half_open_probe_in_flight",
         ), lease
 
     async def _invoke_candidate(
         self, item: RankedCandidate, request: ChatCompletionRequest,
         request_id: str, attempt_index: int,
+        health_updates: dict[tuple[str, str], HealthEligibility],
     ) -> ProviderOutcome | ChatCompletionPayload:
         lease = None
         try:
             if request.model == "auto" and self.probes is not None:
                 eligibility, lease = self._admit_probe(item)
+                health_updates[(item.candidate.provider, item.candidate.model)] = eligibility
                 if not eligibility.eligible:
                     raise _CandidateUnavailable
             result = await item.provider.complete(request, item.candidate.model)
@@ -207,7 +222,7 @@ class GatewayService:
             logger.warning("health transition rejected for request %s", request_id)
 
     def _record_routing_decision(self, explanation: RoutingExplanation) -> None:
-        if self.metrics is None:
+        if self.metrics is None or explanation.selected is None:
             return
         try:
             self.metrics.record_routing_decision(

@@ -106,8 +106,14 @@ def test_scores_and_order_match_v02_for_all_preferences(mode, dimension, caplog)
                 opened(candidate.provider, candidate.model).advance(now=NOW + timedelta(seconds=60))
             )
     router.health_store = HealthStore(records, fail=mode == "unavailable")
-    assert router.rank("auto", prefs) == expected
-    assert router.rank("auto", prefs) == expected
+    for _ in range(2):
+        actual = router.rank("auto", prefs)
+        assert [(r.candidate, r.score) for r in actual] == [
+            (r.candidate, r.score) for r in expected
+        ]
+        assert [r.signal.model_dump(exclude={"health"}) for r in actual] == [
+            r.signal.model_dump(exclude={"health"}) for r in expected
+        ]
     assert "raw-secret" not in caplog.text
     assert "private-token" not in caplog.text
     assert "database/private/path" not in caplog.text

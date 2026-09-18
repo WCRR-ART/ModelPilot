@@ -195,7 +195,7 @@ def test_auto_response_contains_structured_explanation_matching_router_order() -
     assert result["choices"] == []
     assert result["usage"]["total_tokens"] == 5
     assert routing["request_id"] == result["modelpilot"]["request_id"]
-    assert routing["routing_version"] == "v0.2"
+    assert routing["routing_version"] == "v0.3"
     assert [item["provider"] for item in routing["candidates"]] == ["alpha", "beta"]
     assert [item["rank"] for item in routing["candidates"]] == [1, 2]
     assert len({item["rank"] for item in routing["candidates"]}) == 2

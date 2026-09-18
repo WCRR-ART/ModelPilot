@@ -136,6 +136,18 @@ class RoutingSignal(MetricsModel):
     provider: NonEmptyStr
     model: NonEmptyStr
     quality_score: UnitScore
+    quality_source: Literal["static", "blended", "measured"] = "static"
+    static_quality_score: UnitScore | None = None
+    benchmark_quality_score: UnitScore | None = None
+    benchmark_confidence: UnitScore | None = None
+    benchmark_suite_id: NonEmptyStr | None = None
+    benchmark_suite_version: NonEmptyStr | None = None
+    benchmark_suite_fingerprint: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+    benchmark_generated_at: AwareDatetime | None = None
+    benchmark_source_run_ids: tuple[NonEmptyStr, ...] = ()
+    benchmark_latest_run_id: NonEmptyStr | None = None
+    benchmark_latest_run_coverage: UnitScore | None = None
+    benchmark_latest_run_completeness: UnitScore | None = None
     latency_score: UnitScore
     reliability_score: UnitScore
     cost_score: UnitScore

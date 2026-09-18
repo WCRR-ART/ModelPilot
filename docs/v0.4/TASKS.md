@@ -1,7 +1,7 @@
 # V0.4 Implementation Tasks
 
-Each task is a focused independently validated commit. V04-001 through V04-005 are implemented;
-V04-006 and later task descriptions remain plans, not completed features.
+Each task is a focused independently validated commit. V04-001 through V04-006 are implemented;
+V04-007 and later task descriptions remain plans, not completed features.
 
 | Task | Name | Goal and acceptance gate |
 | --- | --- | --- |
@@ -10,7 +10,7 @@ V04-006 and later task descriptions remain plans, not completed features.
 | V04-003 | Benchmark Runner | Explicit bounded runner over dedicated cases with existing adapters, pinned definition and generation settings; fake-provider failure/cancellation tests, no production metrics/health pollution |
 | V04-004 | Benchmark Result Persistence | Separate benchmark store and versioned SQLite migration preserving all existing data; run/result provenance, identity collision and reopen tests |
 | V04-005 | Quality Metrics Aggregation | Scoped weighted quality, unique-case coverage/completeness/confidence, no survivor bias or repeated-case inflation; complete/partial/error/missing-data tests |
-| V04-006 | Confidence-Blended Quality Routing | Optional explicit suite/category profile and measured quality blending; static fallback, health precedence, unchanged other dimensions and deterministic ranking tests |
+| V04-006 | Confidence-Blended Quality Routing | Optional explicit suite identity and overall quality blending; static fallback, health precedence, unchanged other dimensions and deterministic ranking tests |
 | V04-007 | Benchmark Read API / CLI | Read-only inspection and explicit opt-in bounded CLI execution; no HTTP run/control endpoint, no automatic downloads, no secret/raw-output leakage |
 | V04-008 | Benchmark Dashboard | Minimal real-data benchmark/quality view with provenance and missing/error states; no invented scores or broad UI redesign |
 | V04-009 | End-to-End Hardening & Release | Fake-provider full chain, schema compatibility, privacy audit, bilingual docs, version metadata and release-prep validation; publication requires separate authorization |

@@ -126,9 +126,9 @@ def test_excluded_candidate_never_scored_or_called():
     original = service.router._score_candidate
     scored = []
 
-    def score(candidate, weights, snapshot):
+    def score(candidate, weights, snapshot, quality_snapshot=None):
         scored.append(candidate.provider)
-        return original(candidate, weights, snapshot)
+        return original(candidate, weights, snapshot, quality_snapshot)
 
     service.router._score_candidate = score
     assert asyncio.run(service.complete(REQUEST))["model"] == "gemini-model"

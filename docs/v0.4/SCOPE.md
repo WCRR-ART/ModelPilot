@@ -1,9 +1,10 @@
 # ModelPilot V0.4 — Benchmark-Driven Quality Routing
 
 Status: staged implementation; V04-001 definitions/loading, V04-002 pure evaluators, V04-003
-isolated runner, V04-004 independent benchmark persistence and V04-005 pure quality aggregation are
+isolated runner, V04-004 independent benchmark persistence, V04-005 pure quality aggregation and
+V04-006 optional overall quality routing are
 implemented. Stable application version remains 0.3.0; development SQLite schema is 4.
-No production quality routing integration.
+Quality routing requires an explicit suite path and defaults to disabled; no benchmark API/UI yet.
 
 ## Why and user value
 

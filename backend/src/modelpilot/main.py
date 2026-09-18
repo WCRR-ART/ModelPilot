@@ -8,6 +8,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from modelpilot import __version__
+from modelpilot.benchmarks import SQLiteBenchmarkStore, load_benchmark_suite
+from modelpilot.benchmarks.resolver import BenchmarkQualityResolver
 from modelpilot.config import Settings
 from modelpilot.health import ProviderHealthStore
 from modelpilot.health.api import router as health_router
@@ -34,12 +36,21 @@ def build_gateway(
     metrics: MetricsStore | None = None,
     health_store: ProviderHealthStore | None = None,
 ) -> GatewayService:
+    # Explicit suite errors are configuration errors; fail once, before database setup.
+    suite = (
+        load_benchmark_suite(settings.quality_suite_path)
+        if settings.quality_suite_path is not None else None
+    )
     providers = {
         "openai": OpenAIProvider(settings.openai_api_key, settings.openai_base_url, client),
         "gemini": GeminiProvider(settings.gemini_api_key, settings.gemini_base_url, client),
         "deepseek": DeepSeekProvider(settings.deepseek_api_key, settings.deepseek_base_url, client),
     }
     metrics_store = metrics if metrics is not None else build_metrics_store(settings)
+    quality_source = (
+        BenchmarkQualityResolver(suite, SQLiteBenchmarkStore(settings.metrics_db_path))
+        if suite is not None else None
+    )
     if health_store is None and isinstance(metrics_store, ProviderHealthStore):
         health_store = metrics_store
     health = (
@@ -59,6 +70,7 @@ def build_gateway(
         ),
         metrics_store,
         health_store=health_store,
+        quality_source=quality_source,
     )
     return GatewayService(
         router,

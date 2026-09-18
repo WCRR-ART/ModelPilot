@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from math import isfinite
 
+from modelpilot.benchmarks.quality import QualitySnapshot
+from modelpilot.benchmarks.resolver import QualitySignalSource
 from modelpilot.health import ProviderHealthStore
 from modelpilot.health.eligibility import HealthEligibility, health_eligibility
 from modelpilot.metrics import (
@@ -84,11 +86,13 @@ class ModelRouter:
         metrics: MetricsStore | None = None,
         health_store: ProviderHealthStore | None = None,
         clock: Callable[[], datetime] | None = None,
+        quality_source: QualitySignalSource | None = None,
     ) -> None:
         self.providers = providers
         self.candidates = candidates
         self.metrics = metrics
         self.health_store = health_store
+        self.quality_source = quality_source
         self.clock = clock if clock is not None else lambda: datetime.now(UTC)
 
     def rank(
@@ -111,7 +115,7 @@ class ModelRouter:
             return ranked, None
         explanation = RoutingExplanation(
             request_id=request_id,
-            routing_version="v0.3",
+            routing_version="v0.4" if self.quality_source is not None else "v0.3",
             strategy="weighted_measured_v1",
             selected_provider=ranked[0].candidate.provider if ranked else None,
             selected_model=ranked[0].candidate.model if ranked else None,
@@ -153,11 +157,15 @@ class ModelRouter:
             ]
 
         snapshots = self._read_snapshots(available) if requested_model == "auto" else {}
+        quality_snapshots = (
+            self._read_quality_snapshots(available) if requested_model == "auto" else {}
+        )
         ranked = [
             self._score_candidate(
                 candidate,
                 weights,
                 snapshots.get((candidate.provider, candidate.model)),
+                quality_snapshots.get((candidate.provider, candidate.model)),
             )
             for candidate in available
         ]
@@ -220,12 +228,47 @@ class ModelRouter:
             if (snapshot.provider, snapshot.model) in eligible
         }
 
+    def _read_quality_snapshots(
+        self, candidates: list[ModelCandidate]
+    ) -> dict[tuple[str, str], QualitySnapshot]:
+        snapshots = {}
+        if self.quality_source is None:
+            return snapshots
+        for candidate in candidates:
+            key = (candidate.provider, candidate.model)
+            try:
+                snapshot = self.quality_source.get_quality_snapshot(*key)
+                if snapshot is None:
+                    continue
+                snapshot = QualitySnapshot.model_validate(snapshot.model_dump())
+                if (snapshot.provider, snapshot.model) != key or (
+                    snapshot.suite_id, snapshot.suite_version, snapshot.suite_fingerprint
+                ) != self.quality_source.suite_identity:
+                    raise ValueError("quality snapshot identity mismatch")
+                snapshots[key] = snapshot
+            except Exception:
+                # Never expose DB paths, exception text, identifiers or credentials.
+                logger.warning("benchmark quality unavailable; using static quality")
+        return snapshots
+
     def _score_candidate(
         self,
         candidate: ModelCandidate,
         weights: dict[str, float],
         snapshot: ProviderMetricsSnapshot | None,
+        quality_snapshot: QualitySnapshot | None = None,
     ) -> RankedCandidate:
+        quality_score = candidate.quality
+        quality_source = "static"
+        if (
+            quality_snapshot is not None
+            and quality_snapshot.quality_score is not None
+            and quality_snapshot.confidence > 0
+        ):
+            quality_score = blend_score(
+                candidate.quality, quality_snapshot.quality_score, quality_snapshot.confidence
+            )
+            quality_source = _measured_source(quality_snapshot.confidence)
         latency_score, latency_source, latency_confidence = _latency_signal(
             candidate.latency, snapshot
         )
@@ -234,7 +277,7 @@ class ModelRouter:
         )
         cost_score, cost_source, cost_confidence = _cost_signal(candidate.cost, snapshot)
         final_score = round(
-            candidate.quality * weights["quality"]
+            quality_score * weights["quality"]
             + cost_score * weights["cost"]
             + latency_score * weights["latency"]
             + reliability_score * weights["reliability"],
@@ -244,7 +287,25 @@ class ModelRouter:
         signal = RoutingSignal(
             provider=candidate.provider,
             model=candidate.model,
-            quality_score=candidate.quality,
+            quality_score=quality_score,
+            quality_source=quality_source,
+            static_quality_score=candidate.quality,
+            benchmark_quality_score=quality_snapshot.quality_score if quality_snapshot else None,
+            benchmark_confidence=quality_snapshot.confidence if quality_snapshot else None,
+            benchmark_suite_id=quality_snapshot.suite_id if quality_snapshot else None,
+            benchmark_suite_version=quality_snapshot.suite_version if quality_snapshot else None,
+            benchmark_suite_fingerprint=(
+                quality_snapshot.suite_fingerprint if quality_snapshot else None
+            ),
+            benchmark_generated_at=quality_snapshot.generated_at if quality_snapshot else None,
+            benchmark_source_run_ids=quality_snapshot.source_run_ids if quality_snapshot else (),
+            benchmark_latest_run_id=quality_snapshot.latest_run_id if quality_snapshot else None,
+            benchmark_latest_run_coverage=(
+                quality_snapshot.latest_run_coverage if quality_snapshot else None
+            ),
+            benchmark_latest_run_completeness=(
+                quality_snapshot.latest_run_completeness if quality_snapshot else None
+            ),
             latency_score=round(latency_score, 6),
             reliability_score=round(reliability_score, 6),
             cost_score=round(cost_score, 6),
@@ -252,7 +313,7 @@ class ModelRouter:
             measured_confidence=round(confidence_for_samples(sample_count), 6),
             final_score=final_score,
             sources={
-                "quality": "configured",
+                "quality": "configured" if quality_source == "static" else quality_source,
                 "latency": latency_source,
                 "reliability": reliability_source,
                 "cost": cost_source,

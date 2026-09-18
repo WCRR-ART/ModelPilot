@@ -89,5 +89,14 @@ Empty input returns null quality, zero counts/ratios/confidence, no sources/late
 and the definition's real categories for the explicit target. generated_at is caller-supplied aware
 time normalized to UTC. Input run order does not affect output. All inputs are revalidated.
 
-No Store access, Provider calls, snapshot persistence or Router integration occurs; schema stays 4.
-Future routing must respect confidence and provenance; no production quality replacement is enabled.
+The aggregator itself performs no Store access, Provider calls or snapshot persistence; schema stays 4.
+
+## Routing consumption (V04-006)
+
+Optional routing consumes only overall quality_score and the already-computed confidence:
+`quality = static_quality * (1 - confidence) + benchmark_quality * confidence`.
+Missing snapshots, null quality and zero confidence retain static quality. Confidence 1 uses measured
+quality exactly; partial confidence blends. Do not apply coverage/completeness again or recalculate
+confidence in Router. Category evidence is not used for task classification or category routing.
+The original final weighted formula and other three dimensions are unchanged. Health eligibility
+comes first; benchmark quality cannot reopen or bypass a circuit. See ARCHITECTURE.md for wiring.

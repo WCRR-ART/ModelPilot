@@ -8,6 +8,7 @@ class Settings(BaseModel):
     cors_origins: list[str] = ["http://localhost:3000"]
     request_log_limit: int = Field(default=500, ge=1, le=10_000)
     metrics_db_path: Path = Path("./data/modelpilot.db")
+    quality_suite_path: Path | None = None
     circuit_failure_threshold: int = Field(default=3, ge=1)
     circuit_cooldown_seconds: int = Field(default=60, ge=0)
 
@@ -26,9 +27,11 @@ class Settings(BaseModel):
     @classmethod
     def from_env(cls) -> "Settings":
         origins = os.getenv("MODELPILOT_CORS_ORIGINS", "http://localhost:3000")
+        quality_path = os.getenv("MODELPILOT_QUALITY_SUITE_PATH", "").strip()
         return cls(
             cors_origins=[origin.strip() for origin in origins.split(",") if origin.strip()],
             request_log_limit=int(os.getenv("MODELPILOT_REQUEST_LOG_LIMIT", "500")),
+            quality_suite_path=Path(quality_path) if quality_path else None,
             circuit_failure_threshold=int(os.getenv("MODELPILOT_CIRCUIT_FAILURE_THRESHOLD", "3")),
             circuit_cooldown_seconds=int(os.getenv("MODELPILOT_CIRCUIT_COOLDOWN_SECONDS", "60")),
             metrics_db_path=Path(

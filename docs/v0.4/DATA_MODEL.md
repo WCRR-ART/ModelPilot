@@ -86,6 +86,9 @@ or global definition-identity collision enforcement is introduced.
 
 BenchmarkStore offers save_run, get_run (complete run or None), list_runs (complete runs; default 20,
 integer limit 1..100, SQL LIMIT), and list_case_results (ordered tuple, empty for missing run).
+V04-006 adds list_matching_runs(provider, model, suite_id, suite_version, suite_fingerprint):
+all exactly matching runs ordered by finished_at/run_id, read in one consistent transaction.
+It is intentionally not subject to the global recent-list limit.
 Only selected runs are restored; reads use one consistent SQLite snapshot. Corrupt case ordering,
 missing cases, invalid metadata and orphan results fail instead of being silently repaired.
 
@@ -105,3 +108,16 @@ The overall snapshot adds provider/model, suite_id/version/fingerprint, policy_v
 latest_run_id, latest_run_coverage (attempted/total), latest_run_completeness (evaluated/total) expose
 partial latest execution even when historical evidence fills gaps. These three fields are null without
 runs. Source IDs include only contributing runs, including failed attempts. No snapshot is persisted.
+
+## Routing quality evidence (V04-006)
+
+RoutingSignal adds defaulted quality_source (static/blended/measured), nullable static_quality_score,
+benchmark_quality_score, benchmark_confidence, benchmark_suite_id/version/fingerprint,
+benchmark_generated_at, benchmark_latest_run_id/coverage/completeness, plus
+benchmark_source_run_ids (empty tuple by default). Scores/confidence/ratios are finite [0,1];
+timestamps are timezone-aware. quality_score is the actual blended component; sources.quality keeps
+the legacy configured label for static quality and uses blended/measured for evidence consumption.
+
+These fields serialize inside existing routing_decisions.explanation_json; old records without them
+remain readable. No columns, migration, QualitySnapshot table or API endpoint is added. Explanations
+retain provenance even for zero-confidence evidence. Explicit model requests remain unchanged.

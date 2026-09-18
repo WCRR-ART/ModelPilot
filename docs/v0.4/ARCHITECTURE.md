@@ -7,7 +7,7 @@ explicit local Benchmark Definition (suite_id, version)
   -> versioned deterministic Evaluator -> CaseEvaluation
   -> BenchmarkCaseResult -> BenchmarkRun
   -> separate benchmark store (V04-004) -> pure scoped QualitySnapshot (V04-005)
-  -> future confidence-blended quality input to Router
+  -> optional BenchmarkQualityResolver -> confidence-blended Router quality (V04-006)
 ```
 
 ## Boundaries
@@ -25,8 +25,8 @@ V04-003 calls `Provider.complete` directly, never GatewayService. It has no stor
 pricing, probe coordinator or API dependency. An explicitly selected target may be tested even when
 its production circuit is OPEN; benchmark success/failure never changes that circuit. There is no
 automatic selection, retry or fallback. The runner still returns an in-memory result without saving.
-V04-004 adds explicit persistence after execution; quality integration remains a future task.
-SQLite schema is now 4; production inference behavior is unchanged.
+V04-004 adds explicit persistence after execution; V04-006 optionally reads that evidence for quality.
+SQLite schema remains 4; quality routing is disabled unless explicitly configured.
 
 Production attempts describe live latency, reliability and estimated cost. Benchmark records describe
 dedicated task evaluation. Separate storage tables/interfaces and source labels prevent the latter
@@ -57,7 +57,7 @@ SQLite backup (including uncheckpointed WAL). There is no down-migration: the re
 rejects schema 4. Restore the pre-upgrade backup if returning to v0.3.0. Tests use temporary databases;
 no user database is migrated as part of development validation.
 
-## Later quality integration
+## Optional quality integration (V04-006)
 
 V04-005 computes snapshots from explicit definitions and supplied compatible runs, without Store
 access, Provider calls or production side effects. Latest attempt per case wins; execution failure
@@ -68,9 +68,25 @@ replace the earlier proposed failure penalty/latest-complete-run policy. Snapsho
 Health eligibility remains before scoring. Existing quality/cost/latency/reliability preference weights
 and deterministic ordering remain intact. Only the quality component gains a measured input in
 V04-006: `quality = (1 - confidence) * static_quality + confidence * measured_quality`.
-Use a single configured suite/version/category profile for comparisons across candidates; never
-mix incompatible suites or infer categories with an LLM. A candidate lacking compatible evidence
+Use a single configured suite ID/version/fingerprint and overall quality across candidates; never
+mix incompatible suites or infer task categories. A candidate lacking compatible evidence
 uses static quality. Other measured dimensions retain their V0.3 algorithms.
+
+MODELPILOT_QUALITY_SUITE_PATH is optional and blank by default. Composition loads the explicit local
+definition once at startup with the existing strict loader; invalid paths/data fail startup. No smoke
+suite default, scanning or automatic execution exists. Restart to change the loaded definition.
+Router depends on QualitySignalSource, not SQL/files/aggregation. BenchmarkQualityResolver selects
+exact provider/model/suite identity histories through BenchmarkStore.list_matching_runs and calls
+the pure aggregator. Reads use one SQLite snapshot and include all matching history, not a globally
+truncated recent-run list, so older evidence survives partial runs. No cache/TTL is introduced;
+large matching histories can increase per-request read/aggregation cost.
+
+Health gating precedes one quality lookup per eligible candidate per ranking evaluation. The returned
+snapshot is frozen and validated, then reused for score and explanation. OPEN candidates and explicit
+model requests never query quality. HALF_OPEN uses the same blend; probe coordination is unchanged.
+Runtime read/aggregation/identity/validation errors produce a sanitized warning and static quality,
+not inference failure. Incompatible run configurations are rejected rather than silently mixed.
+No benchmark execution, production metrics writes, snapshot persistence or new schema is involved.
 
 Definitions, run provenance, evaluator versions and normalization are explicit. Runs pin a suite
 content fingerprint and provider/model/settings so accidental reuse of a changed version can be

@@ -129,4 +129,16 @@ It invokes no Store or Provider. Quality uses evaluated answers including zeros;
 lower completeness/confidence instead. Latest attempt per case wins, even if it failed. Missing
 attempts in a newer partial run retain historical evidence; latest-run diagnostics remain explicit.
 See EVALUATION.md for the authoritative latest_attempt_v1 formulas, 5/50 ramp and category rules.
-Repeated runs never multiply unique case evidence. No quality routing is enabled.
+Repeated runs never multiply unique case evidence.
+
+## Optional quality routing (V04-006)
+
+Set MODELPILOT_QUALITY_SUITE_PATH to an explicit local suite JSON path to enable overall quality
+blending. Leave it unset/blank to retain existing quality routing. Relative paths resolve from the
+server working directory. Invalid paths/definitions fail startup; the definition is loaded once.
+The smoke suite is never selected automatically and its three cases give confidence zero even
+when all answers are correct. Enabling a suite does not execute or save benchmarks.
+
+Only stored runs matching provider, model, suite ID, version and fingerprint are considered.
+Missing evidence and runtime read/aggregation failures use static quality; failures log sanitized
+warnings. No category classifier, quality API, Dashboard or LLM judge is introduced.

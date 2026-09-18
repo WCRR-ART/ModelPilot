@@ -82,6 +82,20 @@ class SQLiteBenchmarkStore(SQLiteDatabase):
         run = self.get_run(run_id)
         return run.case_results if run is not None else ()
 
+    def list_matching_runs(
+        self, provider: str, model: str, suite_id: str, suite_version: str, suite_fingerprint: str,
+    ) -> list[BenchmarkRun]:
+        """All history for one exact scope; no global-limit starvation or stale-case truncation."""
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            rows = connection.execute(
+                "SELECT * FROM benchmark_runs WHERE provider = ? AND model = ? "
+                "AND suite_id = ? AND suite_version = ? AND suite_fingerprint = ? "
+                "ORDER BY finished_at, run_id",
+                (provider, model, suite_id, suite_version, suite_fingerprint),
+            ).fetchall()
+            return [_restore_run(connection, row) for row in rows]
+
 
 def _insert(connection: sqlite3.Connection, table: str, fields: dict[str, object]) -> None:
     # Identifiers originate only from fixed domain field names, never user strings.

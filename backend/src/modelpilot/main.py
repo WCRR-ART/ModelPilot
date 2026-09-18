@@ -56,6 +56,7 @@ def build_gateway(
             settings.deepseek_model,
         ),
         metrics_store,
+        health_store=health_store,
     )
     return GatewayService(
         router,

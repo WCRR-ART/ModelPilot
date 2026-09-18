@@ -66,3 +66,21 @@ filtering.
 Given the same snapshot, event, threshold, cooldown, and timestamp, a transition returns the
 same serialized snapshot. Re-evaluating an unchanged state at the same time is idempotent.
 
+## V03-004 routing eligibility
+
+Automatic routing reads each configured provider/model health at most once per request,
+using one injected evaluation timestamp. CLOSED and missing records are eligible. OPEN is
+excluded before scoring until the inclusive cooldown boundary; expired OPEN and HALF_OPEN
+are eligible without a score adjustment. Eligibility evaluation does not write state.
+Completed outcomes continue to drive persisted transitions through the existing manager.
+
+Health read or validation failure logs a warning without exception content and fails open.
+Structured internal evidence includes eligibility, effective state, and a stable reason;
+excluded candidates have no fabricated score. HTTP explanations are unchanged in this task.
+Per-key reads share a timestamp but are not an atomic cross-key database snapshot.
+
+Explicit model requests retain their existing exact model matching and fallback semantics;
+health filtering applies only to automatic routing. No new provider/model syntax is added.
+When all automatic candidates are OPEN before cooldown, the existing no-provider path returns
+503; no blocked candidate is reinstated. Duplicate provider/model candidates are attempted
+at most once. HALF_OPEN concurrent admission remains deferred to V03-005.

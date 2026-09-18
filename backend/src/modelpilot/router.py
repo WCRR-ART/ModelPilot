@@ -1,9 +1,12 @@
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from math import isfinite
 
+from modelpilot.health import CircuitState, ProviderHealthStore
+from modelpilot.health.eligibility import HealthEligibility, health_eligibility
 from modelpilot.metrics import (
     MetricsStore,
     ProviderMetricsSnapshot,
@@ -78,10 +81,14 @@ class ModelRouter:
         providers: dict[str, Provider],
         candidates: list[ModelCandidate],
         metrics: MetricsStore | None = None,
+        health_store: ProviderHealthStore | None = None,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.providers = providers
         self.candidates = candidates
         self.metrics = metrics
+        self.health_store = health_store
+        self.clock = clock if clock is not None else lambda: datetime.now(UTC)
 
     def rank(
         self,
@@ -126,6 +133,14 @@ class ModelRouter:
         if requested_model != "auto":
             available = [candidate for candidate in available if candidate.model == requested_model]
 
+        # Duplicate configuration must never cause a second attempt of the same pair.
+        available = list({(item.provider, item.model): item for item in available}.values())
+        if requested_model == "auto":
+            evidence = self.evaluate_health(available, now=self.clock())
+            available = [
+                item for item in available if evidence[(item.provider, item.model)].eligible
+            ]
+
         snapshots = self._read_snapshots(available) if requested_model == "auto" else {}
         ranked = [
             self._score_candidate(
@@ -150,6 +165,28 @@ class ModelRouter:
             )
             for rank, item in enumerate(ranked, start=1)
         ]
+
+    def evaluate_health(
+        self, candidates: list[ModelCandidate], *, now: datetime
+    ) -> dict[tuple[str, str], HealthEligibility]:
+        """Request-local evidence, including exclusions without invented scores."""
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError("now must be timezone-aware")
+        evidence = {}
+        for item in candidates:
+            key = (item.provider, item.model)
+            if key in evidence:
+                continue
+            try:
+                health = self.health_store.get_health(*key) if self.health_store else None
+                evidence[key] = health_eligibility(health, now=now)
+            except Exception:
+                # Do not log database errors, provider identifiers, or credential-bearing text.
+                logger.warning("routing health unavailable; using fail-open eligibility")
+                evidence[key] = HealthEligibility(
+                    eligible=True, state=CircuitState.CLOSED, reason="health_store_unavailable"
+                )
+        return evidence
 
     def _read_snapshots(
         self, candidates: list[ModelCandidate]

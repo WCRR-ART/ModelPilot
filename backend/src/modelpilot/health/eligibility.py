@@ -15,6 +15,8 @@ class HealthEligibility(BaseModel):
         "healthy",
         "circuit_open",
         "half_open_probe_eligible",
+        "half_open_probe_acquired",
+        "half_open_probe_in_flight",
         "health_unknown",
         "health_store_unavailable",
     ]

@@ -11,6 +11,7 @@ from modelpilot import __version__
 from modelpilot.config import Settings
 from modelpilot.health import ProviderHealthStore
 from modelpilot.health.manager import ProviderHealthManager
+from modelpilot.health.probes import HalfOpenProbeCoordinator
 from modelpilot.logging import RequestLogStore
 from modelpilot.metrics import MetricsStore, SQLiteMetricsStore
 from modelpilot.metrics.api import router as metrics_router
@@ -63,6 +64,7 @@ def build_gateway(
         RequestLogStore(settings.request_log_limit),
         metrics_store,
         health,
+        probes=HalfOpenProbeCoordinator(),
     )
 
 

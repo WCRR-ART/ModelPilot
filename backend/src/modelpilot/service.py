@@ -3,7 +3,10 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from modelpilot.health import CircuitState
+from modelpilot.health.eligibility import HealthEligibility
 from modelpilot.health.manager import HealthPersistenceError, ProviderHealthManager
+from modelpilot.health.probes import HalfOpenProbeCoordinator, ProbeLease
 from modelpilot.logging import RequestLogStore
 from modelpilot.metrics import (
     MetricsStore,
@@ -14,7 +17,7 @@ from modelpilot.metrics import (
 )
 from modelpilot.providers import ProviderError, ProviderOutcome
 from modelpilot.providers.base import sanitize_error_message
-from modelpilot.router import ModelRouter
+from modelpilot.router import ModelRouter, RankedCandidate
 from modelpilot.schemas import AttemptLog, ChatCompletionPayload, ChatCompletionRequest, RequestLog
 
 logger = logging.getLogger(__name__)
@@ -22,6 +25,10 @@ logger = logging.getLogger(__name__)
 
 class NoProviderAvailable(RuntimeError):
     pass
+
+
+class _CandidateUnavailable(RuntimeError):
+    """A candidate became unavailable before execution; continue fallback."""
 
 
 class AllProvidersFailed(RuntimeError):
@@ -37,11 +44,13 @@ class GatewayService:
         logs: RequestLogStore,
         metrics: MetricsStore | None = None,
         health: ProviderHealthManager | None = None,
+        probes: HalfOpenProbeCoordinator | None = None,
     ) -> None:
         self.router = router
         self.logs = logs
         self.metrics = metrics
         self.health = health
+        self.probes = probes
 
     async def complete(self, request: ChatCompletionRequest) -> ChatCompletionPayload:
         request_id = f"req_{uuid4().hex}"
@@ -58,7 +67,11 @@ class GatewayService:
         for attempt_index, item in enumerate(ranked):
             attempt_started = perf_counter()
             try:
-                provider_result = await item.provider.complete(request, item.candidate.model)
+                provider_result = await self._invoke_candidate(
+                    item, request, request_id, attempt_index
+                )
+            except _CandidateUnavailable:
+                continue
             except ProviderError as exc:
                 attempts.append(
                     AttemptLog(
@@ -73,8 +86,6 @@ class GatewayService:
                 continue
 
             if isinstance(provider_result, ProviderOutcome):
-                self._record_provider_attempt(provider_result, request_id, attempt_index)
-                self._update_provider_health(provider_result, request_id)
                 if not provider_result.success:
                     attempts.append(
                         AttemptLog(
@@ -135,6 +146,8 @@ class GatewayService:
             result["modelpilot"].update(extension)
             return result
 
+        if not attempts:
+            raise NoProviderAvailable("no configured provider can serve the requested model")
         self._record(
             request_id=request_id,
             request=request,
@@ -145,6 +158,42 @@ class GatewayService:
         if routing is not None:
             self._record_routing_decision(routing)
         raise AllProvidersFailed(request_id)
+
+    def _admit_probe(
+        self, item: RankedCandidate
+    ) -> tuple[HealthEligibility, ProbeLease | None]:
+        candidate = item.candidate
+        evidence = self.router.evaluate_health([candidate], now=self.router.clock())[
+            (candidate.provider, candidate.model)
+        ]
+        if not evidence.eligible or evidence.state is not CircuitState.HALF_OPEN:
+            return evidence, None
+        assert self.probes is not None
+        lease = self.probes.try_acquire(candidate.provider, candidate.model)
+        return HealthEligibility(
+            eligible=lease is not None,
+            state=CircuitState.HALF_OPEN,
+            reason="half_open_probe_acquired" if lease else "half_open_probe_in_flight",
+        ), lease
+
+    async def _invoke_candidate(
+        self, item: RankedCandidate, request: ChatCompletionRequest,
+        request_id: str, attempt_index: int,
+    ) -> ProviderOutcome | ChatCompletionPayload:
+        lease = None
+        try:
+            if request.model == "auto" and self.probes is not None:
+                eligibility, lease = self._admit_probe(item)
+                if not eligibility.eligible:
+                    raise _CandidateUnavailable
+            result = await item.provider.complete(request, item.candidate.model)
+            if isinstance(result, ProviderOutcome):
+                self._record_provider_attempt(result, request_id, attempt_index)
+                self._update_provider_health(result, request_id)
+            return result
+        finally:
+            if lease is not None:
+                self.probes.release(lease)
 
     def _update_provider_health(self, outcome: ProviderOutcome, request_id: str) -> None:
         if self.health is None:

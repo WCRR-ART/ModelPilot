@@ -83,4 +83,33 @@ Explicit model requests retain their existing exact model matching and fallback 
 health filtering applies only to automatic routing. No new provider/model syntax is added.
 When all automatic candidates are OPEN before cooldown, the existing no-provider path returns
 503; no blocked candidate is reinstated. Duplicate provider/model candidates are attempted
-at most once. HALF_OPEN concurrent admission remains deferred to V03-005.
+at most once.
+
+## V03-005 single-process probe coordination
+
+The composition root creates one `HalfOpenProbeCoordinator` per application gateway and
+injects it into the shared service. A short standard-library mutex protects a map of leases
+keyed by `(provider, model)`. The mutex is never held during provider IO or persistence.
+Requests do not wait for another probe's response: a busy candidate is skipped immediately.
+
+Ranking remains side-effect free. Immediately before an automatic provider call, the service
+re-reads that candidate's health with an injected current time. This execution check is separate
+from the request's ranking snapshot and prevents stale rankings from bypassing a new cooldown.
+Only effective HALF_OPEN candidates claim a lease. Claims produce structured reasons
+`half_open_probe_acquired` or `half_open_probe_in_flight`; no scoring bonus or penalty is added.
+
+The lease surrounds the actual call and attempt/health updates, and is released in `finally`,
+including cancellation and unexpected exceptions. Unused candidates never reserve leases.
+An owner identity check makes repeated or stale releases harmless. If every candidate is
+skipped without any provider attempt, the existing 503 unavailable path is used.
+
+Probe success/failure uses the existing health manager. Authentication errors retain the
+existing non-counted behavior (HALF_OPEN may remain), while the lease is still released.
+Health persistence failure still returns a successful inference and releases the lease; a
+later request may probe again if the persisted state has not advanced. Health read failures
+retain fail-open behavior, so protection cannot be guaranteed while the health store is unavailable.
+
+Explicit model requests bypass automatic probe coordination. Leases are process-local only,
+not shared across workers or replicas, and disappear on process exit. No lease data is stored
+in SQLite and the schema remains version 3. External response explanation extensions remain
+the responsibility of V03-006.

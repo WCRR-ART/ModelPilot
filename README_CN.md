@@ -12,8 +12,8 @@ ModelPilot 为应用提供一个 OpenAI 兼容的聊天补全入口，并将 Pro
 
 ## V0.3 功能
 
-源码版本为 **0.3.0（发布准备中）**。在 v0.3.0 tag 和 GitHub Release 发布前，
-最新正式稳定版本仍为 v0.2.0。
+当前正式稳定版本为 **0.3.0**，已发布：
+[ModelPilot v0.3.0](https://github.com/WCRR-ART/ModelPilot/releases/tag/v0.3.0)。
 
 ### Gateway
 

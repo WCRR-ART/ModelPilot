@@ -51,8 +51,8 @@ Malformed rows raise `ProviderHealthStoreDataError`; SQLite errors propagate to 
 
 ## V03-006 routing health evidence
 
-New automatic explanations use `routing_version = "v0.3"`; V03-008 prepares gateway source/health
-version 0.3.0 (publication is a separate step). `RoutingSignal.health` reuses `HealthEligibility` and its stable
+New automatic explanations use `routing_version = "v0.3"`; the published gateway source/health
+version is 0.3.0. `RoutingSignal.health` reuses `HealthEligibility` and its stable
 reason values. Fields are state (nullable), eligible, reason, probe, cooldown_until (nullable
 UTC datetime), and consecutive_failures (nullable). Missing records have CLOSED/health_unknown;
 store failures have null state/health_store_unavailable, never a fabricated healthy state.

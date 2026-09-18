@@ -14,8 +14,8 @@ use measured latency, reliability, and estimated cost.
 
 ## V0.3 features
 
-Source version: **0.3.0 (release preparation)**. The latest published stable release remains
-v0.2.0 until the v0.3.0 tag and GitHub Release are published.
+Current stable version: **0.3.0**, officially published as
+[ModelPilot v0.3.0](https://github.com/WCRR-ART/ModelPilot/releases/tag/v0.3.0).
 
 ### Gateway
 

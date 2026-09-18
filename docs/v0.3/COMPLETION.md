@@ -1,7 +1,7 @@
 # V0.3 Local Completion Checklist
 
-Status: local release preparation complete; publication is not performed by this task.
-Source target: 0.3.0. Published stable version remains v0.2.0 until the separate release workflow.
+Status: local release preparation and the subsequent publication workflow are complete.
+Published stable version: v0.3.0, commit `3cfc7ae21fe74a9805fe6b6c49178d5ebaa4d6d9`.
 
 ## Task evidence
 
@@ -60,7 +60,7 @@ Health admission evidence describes the decision time, not the resulting post-ca
   polling, or write controls were added. Existing V0.2 metrics cards and lists remain intact.
 - npm ci, ESLint, TypeScript and Next.js production build pass; npm audit reports 0 vulnerabilities.
 - CI already runs pytest, Ruff, npm ci, lint, typecheck and build; no deployment or CI change needed.
-- Browser interaction is not claimed by the static/build checks; remote CI remains a post-push gate.
+- Browser interaction is not claimed by the static/build checks; remote CI passed after push.
 - Production Dashboard HTTP smoke check returned 200 with V0.3.0, Provider Health and existing
   metrics/routing/failure sections present; the temporary local server was stopped afterward.
 
@@ -77,8 +77,11 @@ Health admission evidence describes the decision time, not the resulting post-ca
   existing ESLint support warning and an unapproved unrs-resolver install script; all build checks
   pass without approving scripts or upgrading dependencies.
 
-## Publication gate (not executed)
+## Publication completed
 
-After approval: push main, wait for CI on the exact commit, create annotated v0.3.0 tag, then publish
-the formal GitHub Release using docs/releases/v0.3.0.md after removing its draft-status paragraph.
-No push, tag, release, amend, squash or force operation is part of V03-008.
+The separately authorized release workflow pushed main, verified CI on the exact commit, pushed
+annotated tag v0.3.0 and published the non-draft, non-prerelease
+[GitHub Release](https://github.com/WCRR-ART/ModelPilot/releases/tag/v0.3.0).
+[Main CI](https://github.com/WCRR-ART/ModelPilot/actions/runs/35305109741) and
+[tag CI](https://github.com/WCRR-ART/ModelPilot/actions/runs/35305170289) passed.
+Publication did not change source code or the v0.1.0/v0.2.0 tags.

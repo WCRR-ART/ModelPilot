@@ -21,7 +21,7 @@ missing records explicitly labeled No health record. It displays consecutive fai
 absolute UTC cooldown deadlines, local-time last success/failure, and Ready to probe or Probe
 in progress. Null timestamps display an em dash. The existing manual Refresh reloads health;
 there is no polling or write control. Loading, empty and error states are isolated from other
-metrics sections. V0.3 remains under development, not a published stable release.
+metrics sections. V0.3.0 is a published stable release.
 
 ## Design principle
 

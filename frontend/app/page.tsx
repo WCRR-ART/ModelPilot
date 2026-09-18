@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   fetchHealth,
+  fetchProviderHealth,
   fetchProviderMetrics,
   fetchRecentFailures,
   fetchRoutingDecisions,
@@ -14,6 +15,7 @@ import {
   formatPercent,
   formatScore,
   type Health,
+  type ProviderHealth,
   type MetricsSummary,
   type ProviderMetrics,
   type RecentFailure,
@@ -37,6 +39,39 @@ function SectionState({ kind }: { kind: "loading" | "error" }) {
   return (
     <div className={`sectionState ${kind}`} role={kind === "error" ? "alert" : "status"}>
       {kind === "loading" ? "Loading metrics…" : "Unable to load metrics."}
+    </div>
+  );
+}
+
+function ProviderHealthTable({ providers }: { providers: ProviderHealth[] }) {
+  if (providers.length === 0) {
+    return <div className="emptyState">No configured providers.</div>;
+  }
+  const labels = { CLOSED: "Healthy", OPEN: "Open", HALF_OPEN: "Recovering" };
+  const timestamp = (value: string | null) => value === null ? "—" : formatDateTime(value);
+  return (
+    <div className="tableWrap">
+      <table>
+        <caption className="srOnly">Provider circuit health snapshot</caption>
+        <thead><tr>
+          <th>Provider</th><th>Model</th><th>Health</th><th>Consecutive Failures</th>
+          <th>Cooldown</th><th>Probe</th><th>Last Success</th><th>Last Failure</th>
+        </tr></thead>
+        <tbody>{providers.map((provider) => (
+          <tr key={`${provider.provider}:${provider.model}`}>
+            <td><span className="providerBadge">{provider.provider}</span></td>
+            <td className="modelName">{provider.model}</td>
+            <td><span className={`circuitBadge ${provider.reason === "health_unknown" ? "unknown" : provider.state}`}>
+              ● {provider.reason === "health_unknown" ? "No health record" : labels[provider.state]}
+            </span></td>
+            <td>{provider.consecutive_failures ?? "—"}</td>
+            <td>{provider.cooldown_until === null ? "—" : new Date(provider.cooldown_until).toISOString().replace("T", " ").replace(".000Z", " UTC")}</td>
+            <td>{provider.probe_in_flight ? "Probe in progress" : provider.state === "HALF_OPEN" ? "Ready to probe" : "—"}</td>
+            <td>{timestamp(provider.last_success_at)}</td>
+            <td>{timestamp(provider.last_failure_at)}</td>
+          </tr>
+        ))}</tbody>
+      </table>
     </div>
   );
 }
@@ -183,6 +218,7 @@ function FailureList({ failures }: { failures: RecentFailure[] }) {
 
 export default function Dashboard() {
   const [health, setHealth] = useState<Loadable<Health>>(loading);
+  const [providerHealth, setProviderHealth] = useState<Loadable<ProviderHealth[]>>(loading);
   const [summary, setSummary] = useState<Loadable<MetricsSummary>>(loading);
   const [providers, setProviders] = useState<Loadable<ProviderMetrics[]>>(loading);
   const [decisions, setDecisions] = useState<Loadable<RoutingDecision[]>>(loading);
@@ -198,6 +234,7 @@ export default function Dashboard() {
       fetchProviderMetrics(apiUrl),
       fetchRoutingDecisions(apiUrl),
       fetchRecentFailures(apiUrl),
+      fetchProviderHealth(apiUrl),
     ] as const);
 
     if (sequence !== requestSequence.current) return;
@@ -206,10 +243,12 @@ export default function Dashboard() {
     setProviders(settled(results[2]));
     setDecisions(settled(results[3]));
     setFailures(settled(results[4]));
+    setProviderHealth(settled(results[5]));
   }, [apiUrl]);
 
   const refresh = useCallback(async () => {
     setHealth(loading());
+    setProviderHealth(loading());
     setSummary(loading());
     setProviders(loading());
     setDecisions(loading());
@@ -224,7 +263,7 @@ export default function Dashboard() {
     };
   }, [load]);
 
-  const loadingAny = [health, summary, providers, decisions, failures].some(
+  const loadingAny = [health, providerHealth, summary, providers, decisions, failures].some(
     (resource) => resource.status === "loading",
   );
 
@@ -272,6 +311,16 @@ export default function Dashboard() {
         {summary.status === "loading" && <SectionState kind="loading" />}
         {summary.status === "error" && <SectionState kind="error" />}
         {summary.status === "success" && <SummaryCards summary={summary.data} />}
+      </section>
+
+      <section className="panel dashboardSection" aria-labelledby="provider-health-heading">
+        <div className="sectionHeading compact">
+          <div><p className="eyebrow">CIRCUIT STATUS</p><h2 id="provider-health-heading">Provider Health</h2></div>
+          <span className="formula">SNAPSHOT ON REFRESH · COOLDOWN UTC</span>
+        </div>
+        {providerHealth.status === "loading" && <div className="sectionState" role="status">Loading provider health…</div>}
+        {providerHealth.status === "error" && <div className="sectionState error" role="alert">Unable to load provider health.</div>}
+        {providerHealth.status === "success" && <ProviderHealthTable providers={providerHealth.data} />}
       </section>
 
       <section className="panel dashboardSection" aria-labelledby="providers-heading">

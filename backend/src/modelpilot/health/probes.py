@@ -30,3 +30,7 @@ class HalfOpenProbeCoordinator:
             # A repeated or stale release must never remove another request's lease.
             if self._leases.get(key) is lease:
                 del self._leases[key]
+
+    def is_in_flight(self, provider: str, model: str) -> bool:
+        with self._lock:
+            return (provider, model) in self._leases

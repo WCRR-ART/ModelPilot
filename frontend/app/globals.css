@@ -1,3 +1,9 @@
+.circuitBadge { white-space: nowrap; }
+.circuitBadge.CLOSED { color: var(--lime); }
+.circuitBadge.OPEN { color: var(--danger); }
+.circuitBadge.HALF_OPEN { color: var(--cyan); }
+.circuitBadge.unknown { color: var(--muted); }
+
 :root {
   --bg: #071015;
   --surface: #0c171e;

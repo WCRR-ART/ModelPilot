@@ -1,5 +1,28 @@
 # ModelPilot V0.3 Architecture
 
+## Read-only health observability (V03-007)
+
+`GET /v1/health/providers` returns a sorted list of configured provider/model candidates,
+combined with persisted health snapshots. It is separate from service liveness at `/health`.
+Missing records use `CLOSED`, `health_unknown`, zero consecutive failures and null timestamps.
+Disabled providers and stale records outside the configured registry are excluded.
+
+The API reuses `health_eligibility` at one clock instant: an expired OPEN snapshot becomes an
+effective HALF_OPEN view without updating SQLite. Store errors return a sanitized 503 and
+warning, not fabricated healthy data. Only provider/model identity and health metadata are exposed.
+There are no health mutation, reset, or manual probe endpoints. Schema version remains 3.
+
+`probe_in_flight` is a lock-protected read of the existing process-local coordinator, never
+an acquisition or release. It is not persisted and cannot represent other worker processes.
+Snapshots can become stale immediately after reading; they are not admission guarantees.
+
+The existing Dashboard shows Healthy (CLOSED), Open (OPEN), and Recovering (HALF_OPEN), with
+missing records explicitly labeled No health record. It displays consecutive failures,
+absolute UTC cooldown deadlines, local-time last success/failure, and Ready to probe or Probe
+in progress. Null timestamps display an em dash. The existing manual Refresh reloads health;
+there is no polling or write control. Loading, empty and error states are isolated from other
+metrics sections. V0.3 remains under development, not a published stable release.
+
 ## Design principle
 
 Provider health is a separate domain from performance scoring. Metrics describe how a
@@ -80,4 +103,3 @@ Threshold and cooldown values belong to application configuration and are passed
 state machine. Domain defaults are intentionally absent. Validation rejects thresholds below
 one and negative cooldowns; a zero cooldown is valid and immediately permits half-open
 evaluation.
-

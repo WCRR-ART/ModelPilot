@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from modelpilot import __version__
 from modelpilot.config import Settings
 from modelpilot.health import ProviderHealthStore
+from modelpilot.health.api import router as health_router
 from modelpilot.health.manager import ProviderHealthManager
 from modelpilot.health.probes import HalfOpenProbeCoordinator
 from modelpilot.logging import RequestLogStore
@@ -98,6 +99,7 @@ def create_app(
         allow_headers=["Content-Type", "Authorization"],
     )
     app.include_router(metrics_router)
+    app.include_router(health_router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

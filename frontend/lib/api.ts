@@ -3,6 +3,25 @@ export type Health = {
   version: string;
 };
 
+export type ProviderHealth = {
+  provider: string;
+  model: string;
+  state: "CLOSED" | "OPEN" | "HALF_OPEN";
+  eligible: boolean;
+  reason: string;
+  consecutive_failures: number;
+  opened_at: string | null;
+  cooldown_until: string | null;
+  last_failure_at: string | null;
+  last_success_at: string | null;
+  updated_at: string | null;
+  probe_in_flight: boolean;
+};
+
+export function fetchProviderHealth(apiUrl: string): Promise<ProviderHealth[]> {
+  return fetchJson(apiUrl, "/v1/health/providers");
+}
+
 export type MetricsWindow = {
   since: string;
   until: string;

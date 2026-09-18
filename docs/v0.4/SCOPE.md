@@ -1,7 +1,7 @@
 # ModelPilot V0.4 — Benchmark-Driven Quality Routing
 
-Status: design approved for staged implementation; only V04-001 is implemented initially.
-Stable application version remains 0.3.0 and SQLite schema remains 3 in V04-001.
+Status: staged implementation; V04-001 definitions/loading and V04-002 pure evaluators are implemented.
+Stable application version remains 0.3.0 and SQLite schema remains 3. No runner or routing integration.
 
 ## Why and user value
 

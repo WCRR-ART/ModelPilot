@@ -1,5 +1,6 @@
 """Immutable benchmark definitions, independent of execution and production routing."""
 
+from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
@@ -9,6 +10,7 @@ from pydantic import (
     Field,
     StrictStr,
     StringConstraints,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
@@ -58,8 +60,18 @@ class ContainsSpec(_VersionedEvaluator):
 
 class NumericToleranceSpec(_VersionedEvaluator):
     kind: Literal["numeric_tolerance"]
-    expected_number: FiniteNumber
-    tolerance: Annotated[FiniteNumber, Field(ge=0)] = 0.0
+    expected_number: Annotated[Decimal, Field(allow_inf_nan=False)]
+    tolerance: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)] = Decimal(0)
+
+    @field_validator("expected_number", "tolerance", mode="before")
+    @classmethod
+    def decimal_input(cls, value: object, info: ValidationInfo) -> object:
+        # Pydantic emits Decimal as strings for lossless model JSON round-trips.
+        if info.mode == "json" and isinstance(value, str):
+            return value
+        if isinstance(value, bool) or not isinstance(value, (Decimal, int, float)):
+            raise ValueError("expected a finite numeric value")
+        return Decimal(str(value))
 
 
 class JsonEqualSpec(_VersionedEvaluator):

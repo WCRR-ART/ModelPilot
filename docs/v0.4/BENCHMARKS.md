@@ -31,7 +31,9 @@ Message content is preserved verbatim. All definition models reject mutation; ne
 tuples. Pydantic unchecked construction/copy escape hatches are not supported loading paths.
 
 Evaluator configuration is a discriminated union on `kind`; see EVALUATION.md. Expected text is a
-strict string, expected number a finite strict number. For json_equal, `expected_json` is a string
+strict string, expected number a finite Decimal loaded from a JSON numeric token. Model JSON
+serialization uses decimal strings for precision-preserving round trips; dataset numeric strings
+remain invalid. For json_equal, `expected_json` is a string
 containing a complete valid JSON document, e.g. `"{\"ok\":true}"`. This deliberately avoids a mutable
 dict/list buried inside an otherwise frozen definition. It can represent any JSON value, including
 JSON null, and is validated but not evaluated against model output in V04-001.

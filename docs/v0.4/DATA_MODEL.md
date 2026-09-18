@@ -18,11 +18,18 @@ are the concrete evaluator variants. Definition JSON round-trips through model_d
 model_validate_json; tuples serialize as arrays. The loader rejects duplicate JSON keys, which
 ordinary Pydantic JSON parsing alone does not detect; use the loader for dataset files.
 
-## Planned result layer (not implemented in V04-001)
+## Evaluation result (implemented in V04-002)
+
+CaseEvaluation: frozen typed evaluator_kind/version, finite score [0,1], strict passed boolean and
+stable reason. It contains no raw expected/actual output. NumericToleranceSpec now uses Decimal
+expected_number/tolerance; the loader preserves numeric token precision. See EVALUATION.md for
+the dataset versus model-serialization formats and inclusive Decimal comparison semantics.
+
+## Result layer roadmap
 
 | Model | Minimum planned data and invariants |
 | --- | --- |
-| CaseEvaluation | evaluator kind/version, score [0,1], structured reason, evaluation status; no natural-language-only result |
+| CaseEvaluation (implemented) | evaluator kind/version, score [0,1], passed, structured reason; no natural-language-only result |
 | BenchmarkCaseResult | run_id, suite/version/case/category, provider/model, evaluation or explicit failure, nullable usage/latency/cost; no production request payload |
 | BenchmarkRun | run_id, suite identity/fingerprint, provider/model, generation settings, evaluator provenance, planned/terminal case counts, state, UTC aware started/finished timestamps |
 | QualitySnapshot | provider/model/suite/version/category, provenance, quality [0,1] or null, distinct sample count, coverage/completeness/confidence [0,1], aggregation policy version |

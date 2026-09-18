@@ -1,6 +1,7 @@
 """Strict data-only JSON parsing shared by definitions and the file loader."""
 
 import json
+from decimal import Decimal, InvalidOperation
 from math import isfinite
 
 
@@ -24,5 +25,21 @@ def _float(value: str) -> float:
     return number
 
 
+def _decimal(value: str) -> Decimal:
+    _float(value)  # Preserve the definition parser's finite numeric range.
+    try:
+        number = Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError("unsupported JSON number") from exc
+    if not number.is_finite():
+        raise ValueError("non-finite JSON number")
+    return number
+
+
 def parse_json_document(text: str) -> object:
-    return json.loads(text, object_pairs_hook=_object, parse_constant=_constant, parse_float=_float)
+    return json.loads(
+        text,
+        object_pairs_hook=_object,
+        parse_constant=_constant,
+        parse_float=_decimal,
+    )

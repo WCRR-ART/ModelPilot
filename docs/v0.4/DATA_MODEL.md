@@ -25,6 +25,25 @@ stable reason. It contains no raw expected/actual output. NumericToleranceSpec n
 expected_number/tolerance; the loader preserves numeric token precision. See EVALUATION.md for
 the dataset versus model-serialization formats and inclusive Decimal comparison semantics.
 
+## In-memory execution results (implemented in V04-003)
+
+- BenchmarkTarget: explicit nonblank provider/model, no auto or surrounding whitespace.
+- BenchmarkRunConfig: positive max_cases, case_timeout_seconds, max_tokens; temperature in [0,2].
+- BenchmarkCaseResult: case_id/category, provider/model, completed or provider_failed, nonnegative
+  latency_ms, nullable nonnegative token counts, normalized error_type, CaseEvaluation or null.
+  Completed requires an evaluation and no error; failed requires an error and no evaluation.
+- BenchmarkRun: run_id, suite_id/suite_version, SHA-256 suite_fingerprint, provider/model, config,
+  UTC aware started_at/finished_at, completed or completed_with_failures, total_cases, completed_cases,
+  execution_failed_cases, terminated_early and ordered immutable case_results.
+
+completed_cases counts successful executions, including wrong answers, not all attempted cases.
+Result counts/status/identity/time order are validated. Results have unique case IDs; a partial run
+requires a terminal authentication error. Auth on the final case is complete with failures, not early.
+Nested case results inherit run/suite identity from their containing run instead of duplicating it.
+There are no raw outputs, prompts, secrets, error messages, database IDs or estimated costs.
+Config plus suite fingerprint and per-evaluation version retain execution provenance. All result
+models are frozen, extra-forbid and JSON serializable. No QualitySnapshot is generated.
+
 ## Result layer roadmap
 
 | Model | Minimum planned data and invariants |

@@ -54,7 +54,8 @@ latest compatible complete run; do not mix changed suites, evaluator versions or
 The full suite aggregate may be displayed but category/profile selection must remain explicit.
 
 For a category with declared cases i, positive weights w_i and result scores s_i:
-`quality = sum(w_i * s_i) / sum(w_i)` on a complete run. Provider failures count as zero; they
+`quality = sum(w_i * s_i) / sum(w_i)` on a complete run. Proposed aggregation penalties count
+provider failures as zero; V04-003 execution records still have evaluation=null, not score=0. They
 are not omitted from the denominator. Evaluator/system failure makes the run ineligible for routing.
 Partial-run progress may be displayed, but must not be labeled a complete quality measurement.
 

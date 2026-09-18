@@ -1,4 +1,4 @@
-"""Benchmark definitions and local dataset loading; no execution side effects."""
+"""Dedicated benchmark definitions, evaluation and explicit isolated execution."""
 
 from modelpilot.benchmarks.evaluators import CaseEvaluation, evaluate_case, normalize_text
 from modelpilot.benchmarks.loader import BenchmarkLoadError, load_benchmark_suite
@@ -14,8 +14,20 @@ from modelpilot.benchmarks.models import (
     NormalizedExactMatchSpec,
     NumericToleranceSpec,
 )
+from modelpilot.benchmarks.results import (
+    BenchmarkCaseResult,
+    BenchmarkRun,
+    BenchmarkRunConfig,
+    BenchmarkTarget,
+)
+from modelpilot.benchmarks.runner import BenchmarkRunner
 
 __all__ = [
+    "BenchmarkCaseResult",
+    "BenchmarkRun",
+    "BenchmarkRunConfig",
+    "BenchmarkRunner",
+    "BenchmarkTarget",
     "BenchmarkCase",
     "BenchmarkCategory",
     "BenchmarkLoadError",

@@ -2,7 +2,7 @@
 
 ```text
 explicit local Benchmark Definition (suite_id, version)
-  -> explicitly invoked Benchmark Runner (later)
+  -> explicitly invoked Benchmark Runner (V04-003)
   -> existing Provider adapter -> Model Response
   -> versioned deterministic Evaluator -> CaseEvaluation
   -> BenchmarkCaseResult -> BenchmarkRun
@@ -12,12 +12,20 @@ explicit local Benchmark Definition (suite_id, version)
 
 ## Boundaries
 
-The new `modelpilot.benchmarks` package owns definitions and loading without importing FastAPI,
-Router, providers, health or stores. V04-001 ends at loading: none of the downstream arrows execute.
+The `modelpilot.benchmarks` definition/loading modules do not depend on FastAPI, Router, providers,
+health or stores. The V04-003 runner depends only on the abstract Provider and its normalized outcome,
+shared request schema, definitions, result models and pure evaluators.
 Evaluation is a pure response-to-score operation; the runner owns I/O and outcome/error handling.
-Later runner calls must be explicit, use dedicated cases and never intercept production traffic.
+Runner calls are explicit, use dedicated cases and never intercept production traffic.
 Benchmark calls must not automatically create production attempts or drive circuit transitions.
-Runner configuration must explicitly bound requests/time/cost before any real execution is enabled.
+Runner configuration bounds case count, each call's deadline and generated token count. It does not
+estimate or enforce a monetary budget; real calls can incur provider charges.
+
+V04-003 calls `Provider.complete` directly, never GatewayService. It has no store, health, Router,
+pricing, probe coordinator or API dependency. An explicitly selected target may be tested even when
+its production circuit is OPEN; benchmark success/failure never changes that circuit. There is no
+automatic selection, retry or fallback. Results remain in memory; downstream store/quality arrows
+are future tasks. SQLite schema remains 3 and production behavior is unchanged.
 
 Production attempts describe live latency, reliability and estimated cost. Benchmark records describe
 dedicated task evaluation. Separate storage tables/interfaces and source labels prevent the latter

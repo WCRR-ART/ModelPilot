@@ -14,6 +14,11 @@ from modelpilot.benchmarks.models import (
     NormalizedExactMatchSpec,
     NumericToleranceSpec,
 )
+from modelpilot.benchmarks.quality import (
+    CategoryQualitySnapshot,
+    QualitySnapshot,
+    aggregate_quality,
+)
 from modelpilot.benchmarks.results import (
     BenchmarkCaseResult,
     BenchmarkRun,
@@ -29,6 +34,9 @@ from modelpilot.benchmarks.store import (
 )
 
 __all__ = [
+    "CategoryQualitySnapshot",
+    "QualitySnapshot",
+    "aggregate_quality",
     "BenchmarkStore",
     "BenchmarkStoreDataError",
     "DuplicateBenchmarkRunError",

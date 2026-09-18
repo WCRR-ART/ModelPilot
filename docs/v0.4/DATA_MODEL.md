@@ -42,7 +42,7 @@ requires a terminal authentication error. Auth on the final case is complete wit
 Nested case results inherit run/suite identity from their containing run instead of duplicating it.
 There are no raw outputs, prompts, secrets, error messages, database IDs or estimated costs.
 Config plus suite fingerprint and per-evaluation version retain execution provenance. All result
-models are frozen, extra-forbid and JSON serializable. No QualitySnapshot is generated.
+models are frozen, extra-forbid and JSON serializable. The runner itself generates no QualitySnapshot.
 
 ## Result layer roadmap
 
@@ -92,4 +92,16 @@ missing cases, invalid metadata and orphan results fail instead of being silentl
 No prompt, expected answer, full suite JSON, raw output, error message or credential is stored. Suite
 definitions remain repository/user-managed files: retain their exact version to replay a historical
 run. A fingerprint identifies content but does not recover the definition. Runs are immutable history;
-repeats need new IDs. Production APIs and source version remain unchanged; QualitySnapshot is deferred.
+repeats need new IDs. Production APIs and source version remain unchanged; snapshots are computed below.
+
+## Computed quality snapshots (V04-005)
+
+QualitySnapshot and CategoryQualitySnapshot are frozen, extra-forbid, serializable models.
+Both expose nullable quality_score; coverage, execution_completeness, weighted_evaluation_coverage,
+confidence; total_cases, observed_cases, evaluated_cases and execution_failed_cases. Ratios are finite
+in [0,1]; counts refer to unique cases, not repeated executions. Category snapshots identify category.
+The overall snapshot adds provider/model, suite_id/version/fingerprint, policy_version, run_config
+(null without runs), source_run_count/source_run_ids, ordered categories and UTC generated_at.
+latest_run_id, latest_run_coverage (attempted/total), latest_run_completeness (evaluated/total) expose
+partial latest execution even when historical evidence fills gaps. These three fields are null without
+runs. Source IDs include only contributing runs, including failed attempts. No snapshot is persisted.

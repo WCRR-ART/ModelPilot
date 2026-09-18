@@ -47,33 +47,47 @@ resource/recursion failures yield invalid_json for answers. JSON string values a
 No database, filesystem, environment, time, randomness, network, provider or LLM access occurs during
 evaluation. Invalid spec kind/version or non-text caller input fails explicitly as a programming error.
 
-## Planned aggregation and confidence (V04-005)
+## Aggregation and confidence (V04-005, revised contract)
 
-Scope: provider/model, suite_id/version, category and versioned evaluator configuration. Use the
-latest compatible complete run; do not mix changed suites, evaluator versions or generation settings.
-The full suite aggregate may be displayed but category/profile selection must remain explicit.
+This supersedes the proposed failure-as-zero penalty and latest-complete-run policy.
+Quality is not reliability. Execution failures never enter the quality numerator or denominator.
+Completed wrong answers, including score=0, are valid evidence and cannot be filtered out.
 
-For a category with declared cases i, positive weights w_i and result scores s_i:
-`quality = sum(w_i * s_i) / sum(w_i)` on a complete run. Proposed aggregation penalties count
-provider failures as zero; V04-003 execution records still have evaluation=null, not score=0. They
-are not omitted from the denominator. Evaluator/system failure makes the run ineligible for routing.
-Partial-run progress may be displayed, but must not be labeled a complete quality measurement.
+aggregate_quality(suite, runs, target=..., generated_at=...) is pure domain calculation.
+Every run must match provider/model, suite ID/version/fingerprint, run configuration, case identities,
+categories and evaluator kind/version. The fingerprint is checked against the supplied definition.
+Invalid historical runs are rejected even when newer runs would supersede them. Partial results must
+be an executed prefix of the definition, consistent with Runner's authentication fail-fast behavior.
 
-Let n be distinct successfully evaluated case IDs in that category (not repeat executions),
-coverage be their declared weight / total declared category weight, and completeness be terminal
-case results / declared case count. Clamp all ratios to [0,1]. Proposed versioned policy:
-`ramp(n) = 0 if n < 5 else min(1, (n - 5) / 45)`;
-`confidence = ramp(n) * coverage * completeness`.
-Only complete, compatible runs without system/evaluator errors are eligible; otherwise confidence
-is 0 and measured quality is unavailable for routing. Provider failures reduce coverage/confidence
-as well as the score. Repeating one case cannot inflate n. A tiny smoke suite always has zero routing
-confidence and is not sufficient evidence to override static quality.
+For each case, the latest actual attempt by (run.finished_at, run_id) wins. A latest failure removes
+old successful evidence. Cases absent from a newer partial run retain their own latest historical
+attempt. Identical duplicate run IDs are deduplicated; conflicting same-ID records are rejected.
+Only runs contributing selected attempts appear in lexically sorted source_run_ids. Repetition never
+multiplies independent case evidence. No age expiry is applied in this task.
 
-No eligible benchmark => measured quality null, confidence 0, static quality unchanged. This is a
-conservative evidence-weight heuristic, not a statistical confidence interval or scientific proof.
-Thresholds and policy version will be explicit inputs in V04-005/006, not baked into V04-001 models.
+For the suite and independently for each real category:
 
-Provider generation is not guaranteed reproducible byte-for-byte, even with fixed sampling settings.
-Record suite fingerprint, evaluator version, provider/model identity, settings, time and errors so
-the procedure can be replayed and differences audited. Any future LLM judge needs a separate design
-covering cost, bias, judge version and reproducibility; it is outside the initial implementation.
+- quality_score = sum(evaluated weight * score) / sum(evaluated weight); null without evaluations.
+- coverage = observed unique cases / total expected cases; observed includes execution failures.
+- execution_completeness = evaluated unique cases / total expected cases; wrong answers count.
+- weighted_evaluation_coverage = evaluated weight / total expected weight.
+- ramp(n) = clamp((n - 5) / 45, 0, 1), using unique evaluated cases in this scope.
+- confidence = ramp(n) * weighted_evaluation_coverage * execution_completeness.
+
+The fixed versioned policy is latest_attempt_v1: n<=5 gives zero sample confidence, 6..49 grows
+linearly, n>=50 gives sample confidence 1. This preserves the planned 5/50 rule, not the suggested 20.
+A fully wrong 50-case run has quality 0 and confidence 1. A perfect 3-case smoke has quality 1
+and confidence 0. This is a conservative evidence-weight heuristic, not a statistical interval.
+Partial scores in [0,1] are supported. Overall quality weights cases directly, not category means.
+
+Categories appear in first-occurrence order in the definition; absent categories are not invented.
+latest_run_id, latest_run_coverage (attempted/total), and latest_run_completeness (evaluated/total)
+separately expose the latest run. Historical evidence must not imply the latest execution was complete.
+These diagnostics do not add an undocumented factor to confidence.
+
+Empty input returns null quality, zero counts/ratios/confidence, no sources/latest run/config,
+and the definition's real categories for the explicit target. generated_at is caller-supplied aware
+time normalized to UTC. Input run order does not affect output. All inputs are revalidated.
+
+No Store access, Provider calls, snapshot persistence or Router integration occurs; schema stays 4.
+Future routing must respect confidence and provenance; no production quality replacement is enabled.

@@ -6,7 +6,7 @@ explicit local Benchmark Definition (suite_id, version)
   -> existing Provider adapter -> Model Response
   -> versioned deterministic Evaluator -> CaseEvaluation
   -> BenchmarkCaseResult -> BenchmarkRun
-  -> separate benchmark store (V04-004) -> future scoped QualitySnapshot
+  -> separate benchmark store (V04-004) -> pure scoped QualitySnapshot (V04-005)
   -> future confidence-blended quality input to Router
 ```
 
@@ -58,6 +58,12 @@ rejects schema 4. Restore the pre-upgrade backup if returning to v0.3.0. Tests u
 no user database is migrated as part of development validation.
 
 ## Later quality integration
+
+V04-005 computes snapshots from explicit definitions and supplied compatible runs, without Store
+access, Provider calls or production side effects. Latest attempt per case wins; execution failure
+removes stale scores rather than becoming quality zero. Coverage, evaluated completeness, weighted
+coverage, confidence and latest-run diagnostics stay distinct. The approved formulas in EVALUATION.md
+replace the earlier proposed failure penalty/latest-complete-run policy. Snapshots are not persisted.
 
 Health eligibility remains before scoring. Existing quality/cost/latency/reliability preference weights
 and deterministic ordering remain intact. Only the quality component gains a measured input in

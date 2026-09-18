@@ -121,3 +121,12 @@ overwritten. The same file is upgraded to schema 4, with separate benchmark tabl
 attempt/health/routing/metrics writes are performed. Back up before migration; see ARCHITECTURE.md
 for rollback limitations. Definitions and raw answers are not stored. No benchmark API/CLI, quality
 aggregation or routing integration is introduced in this task.
+
+## Quality aggregation (V04-005)
+
+aggregate_quality takes the definition, compatible runs, explicit target and an aware generated_at.
+It invokes no Store or Provider. Quality uses evaluated answers including zeros; execution failures
+lower completeness/confidence instead. Latest attempt per case wins, even if it failed. Missing
+attempts in a newer partial run retain historical evidence; latest-run diagnostics remain explicit.
+See EVALUATION.md for the authoritative latest_attempt_v1 formulas, 5/50 ramp and category rules.
+Repeated runs never multiply unique case evidence. No quality routing is enabled.

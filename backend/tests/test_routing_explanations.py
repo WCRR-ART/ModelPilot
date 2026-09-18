@@ -356,7 +356,7 @@ def test_new_database_uses_schema_two_with_routing_table(tmp_path: Path) -> None
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'routing_decisions'"
         ).fetchone()
 
-    assert version == SCHEMA_VERSION == 2
+    assert version == SCHEMA_VERSION == 3
     assert table == ("routing_decisions",)
 
 

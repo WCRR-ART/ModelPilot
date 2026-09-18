@@ -27,14 +27,29 @@ All datetimes are normalized to UTC. Naive datetimes are rejected.
 - Recorded success/failure/open timestamps cannot be later than `updated_at`.
 - Threshold and cooldown are transition inputs, not persisted model constants.
 
-## Persistence forecast
+## Persistence (V03-002)
 
-A later task may persist these fields in SQLite with `(provider, model)` as the unique key.
-V03-001 defines no table and performs no migration. Health history can continue to be derived
-from existing attempt records; the health table stores only the latest operational snapshot.
+Schema version 3 adds `provider_health` in the existing ModelPilot SQLite database, with
+`PRIMARY KEY (provider, model)`. The table stores exactly the nine fields above: canonical
+uppercase state strings, integer failure counts, and UTC ISO-8601 timestamps with microsecond
+precision. Optional timestamps remain SQL NULL. Threshold and cooldown duration are not stored.
+
+`ProviderHealthStore` is an independent protocol exposing `get_health`, `upsert_health`, and
+`list_health`. The existing `SQLiteMetricsStore` implements both store protocols, reusing its
+database path, connection lifecycle, WAL, timeout, and transaction conventions. The
+`MetricsStore` protocol itself is unchanged.
+
+Fresh databases initialize at v3; existing v1 and v2 databases migrate transactionally to v3
+without deleting attempts, pricing, or routing decisions. Failed migrations roll back.
+Unsupported newer schema versions fail explicitly.
+
+Upserts atomically replace the snapshot for a key; no history row is added. The last submitted
+snapshot wins (there is no concurrency admission or stale-write arbitration in V03-002).
+Missing keys return None. Lists sort by provider and model. Reads restore the exact stored
+state, including expired OPEN circuits, without evaluating the clock or advancing transitions.
+Malformed rows raise `ProviderHealthStoreDataError`; SQLite errors propagate to the caller.
 
 ## Sensitive-data boundary
 
 The model contains no prompt, completion, raw error body, API key, authorization value, user
 identifier, or request payload.
-

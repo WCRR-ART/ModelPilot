@@ -10,6 +10,8 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from modelpilot.health.models import ProviderHealth
+from modelpilot.health.store import ProviderHealthStoreDataError
 from modelpilot.metrics.models import (
     AttemptRecord,
     MetricsSummary,
@@ -21,7 +23,7 @@ from modelpilot.metrics.models import (
     RoutingExplanation,
 )
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 METRICS_ATTEMPT_LIMIT = 100
 METRICS_MAX_AGE = timedelta(days=7)
 SAFE_ERROR_TYPES = frozenset(
@@ -89,6 +91,7 @@ class SQLiteMetricsStore:
                 if row is None:
                     self._create_version_one_schema(connection)
                     self._migrate_version_one_to_two(connection)
+                    self._migrate_version_two_to_three(connection)
                     connection.execute(
                         "INSERT INTO schema_version (singleton, version) VALUES (?, ?)",
                         (1, SCHEMA_VERSION),
@@ -98,8 +101,10 @@ class SQLiteMetricsStore:
                         f"unsupported metrics schema version {row['version']}; "
                         f"expected {SCHEMA_VERSION}"
                     )
-                elif row["version"] == 1:
-                    self._migrate_version_one_to_two(connection)
+                elif row["version"] < SCHEMA_VERSION:
+                    if row["version"] == 1:
+                        self._migrate_version_one_to_two(connection)
+                    self._migrate_version_two_to_three(connection)
                     connection.execute(
                         "UPDATE schema_version SET version = ? WHERE singleton = 1",
                         (SCHEMA_VERSION,),
@@ -177,6 +182,71 @@ class SQLiteMetricsStore:
             ON routing_decisions (created_at DESC, request_id DESC)
             """
         )
+
+    @staticmethod
+    def _migrate_version_two_to_three(connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS provider_health (
+                provider TEXT NOT NULL CHECK (length(provider) > 0),
+                model TEXT NOT NULL CHECK (length(model) > 0),
+                state TEXT NOT NULL CHECK (state IN ('CLOSED', 'OPEN', 'HALF_OPEN')),
+                consecutive_failures INTEGER NOT NULL CHECK (consecutive_failures >= 0),
+                opened_at TEXT,
+                cooldown_until TEXT,
+                last_failure_at TEXT,
+                last_success_at TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (provider, model)
+            )
+            """
+        )
+
+    def get_health(self, provider: str, model: str) -> ProviderHealth | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM provider_health WHERE provider = ? AND model = ?",
+                (provider, model),
+            ).fetchone()
+        return _health_from_row(row) if row is not None else None
+
+    def list_health(self) -> list[ProviderHealth]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM provider_health ORDER BY provider, model"
+            ).fetchall()
+        return [_health_from_row(row) for row in rows]
+
+    def upsert_health(self, health: ProviderHealth) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO provider_health (
+                    provider, model, state, consecutive_failures, opened_at,
+                    cooldown_until, last_failure_at, last_success_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider, model) DO UPDATE SET
+                    state = excluded.state,
+                    consecutive_failures = excluded.consecutive_failures,
+                    opened_at = excluded.opened_at,
+                    cooldown_until = excluded.cooldown_until,
+                    last_failure_at = excluded.last_failure_at,
+                    last_success_at = excluded.last_success_at,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    health.provider, health.model, health.state.value,
+                    health.consecutive_failures,
+                    *(
+                        _serialize_datetime(value) if value is not None else None
+                        for value in (
+                            health.opened_at, health.cooldown_until,
+                            health.last_failure_at, health.last_success_at, health.updated_at,
+                        )
+                    ),
+                ),
+            )
+            connection.commit()
 
     def record_attempt(self, attempt: AttemptRecord) -> None:
         with self._connect() as connection:
@@ -486,6 +556,13 @@ class SQLiteMetricsStore:
                 (limit,),
             ).fetchall()
         return [_recent_failure_from_row(row) for row in rows]
+
+
+def _health_from_row(row: sqlite3.Row) -> ProviderHealth:
+    try:
+        return ProviderHealth.model_validate(dict(row))
+    except ValidationError as error:
+        raise ProviderHealthStoreDataError("malformed provider health row") from error
 
 
 def _serialize_datetime(value: datetime) -> str:

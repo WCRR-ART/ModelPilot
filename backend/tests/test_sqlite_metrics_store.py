@@ -98,7 +98,7 @@ def test_schema_version_is_current(database_path: Path) -> None:
             "SELECT version FROM schema_version WHERE singleton = 1"
         ).fetchone()[0]
 
-    assert version == SCHEMA_VERSION == 2
+    assert version == SCHEMA_VERSION == 3
 
 
 def test_reopens_initialized_database_without_destroying_data(database_path: Path) -> None:
@@ -367,10 +367,10 @@ def test_incompatible_schema_version_fails_clearly(database_path: Path) -> None:
             "CREATE TABLE schema_version (singleton INTEGER PRIMARY KEY, version INTEGER NOT NULL)"
         )
         connection.execute(
-            "INSERT INTO schema_version (singleton, version) VALUES (?, ?)", (1, 3)
+            "INSERT INTO schema_version (singleton, version) VALUES (?, ?)", (1, 4)
         )
 
-    with pytest.raises(SchemaVersionError, match="unsupported metrics schema version 3"):
+    with pytest.raises(SchemaVersionError, match="unsupported metrics schema version 4"):
         SQLiteMetricsStore(database_path)
 
 

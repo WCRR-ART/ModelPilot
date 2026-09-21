@@ -142,7 +142,7 @@ function qualityFor(provider, model) {
 }
 
 const fixtures = {
-  "/health": { status: "ok", version: "0.3.0 · TEST DATA" },
+  "/health": { status: "ok", version: "0.4.0 · TEST DATA" },
   "/v1/metrics/summary": {
     window: { since: "2026-09-20T04:00:00Z", until: "2026-09-21T04:00:00Z" },
     request_count: 2,

@@ -17,6 +17,7 @@ frontend/.next/
 frontend/out/
 frontend/.env*.local
 *.tsbuildinfo
+.artifacts/
 
 .DS_Store
 Thumbs.db

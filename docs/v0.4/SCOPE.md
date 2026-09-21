@@ -1,11 +1,10 @@
 # ModelPilot V0.4 — Benchmark-Driven Quality Routing
 
-Status: staged implementation; V04-001 definitions/loading, V04-002 pure evaluators, V04-003
-isolated runner, V04-004 independent benchmark persistence, V04-005 pure quality aggregation and
-V04-006 optional overall quality routing and V04-007 read-only API/explicit CLI are
-implemented. Stable application version remains 0.3.0; development SQLite schema is 4.
-Quality routing requires an explicit suite path and defaults to disabled. V04-008 adds a read-only
-Benchmark Dashboard; code checks pass, while browser interaction/layout acceptance remains pending.
+Status: V04-001 through V04-009 implemented and locally validated; release target 0.4.0 is unpublished.
+Published stable version remains 0.3.0. Application metadata is 0.4.0; SQLite schema stays 4.
+Quality routing requires an explicit suite path and defaults to disabled. The read-only Benchmark
+Dashboard has passed actual browser interaction/layout and isolated real-backend acceptance.
+See COMPLETION.md and DASHBOARD.md for evidence; remote CI still requires an authorized push.
 
 ## Why and user value
 
@@ -39,7 +38,7 @@ Implement only BenchmarkMessage, EvaluatorSpec variants, BenchmarkCase, Benchmar
 dataset loading plus a 2–5 case smoke fixture. No provider calls, evaluator execution, runner, SQL,
 API, Dashboard or Router changes. No benchmark results or measured scores are invented.
 
-## Definition of Done for V0.4 (future tasks)
+## Definition of Done for V0.4
 
 Every score is traceable to real benchmark outcomes and an immutable definition. Identical inputs
 produce identical evaluator/aggregation results. Model generation itself may vary; record run

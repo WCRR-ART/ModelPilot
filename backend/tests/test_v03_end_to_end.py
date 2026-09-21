@@ -235,7 +235,7 @@ def test_probe_persistence_failures_remain_independent(tmp_path, monkeypatch, me
 
 def test_release_version_metadata_is_consistent():
     root = Path(__file__).resolve().parents[2]
-    assert __version__ == "0.3.0"
+    assert __version__ == "0.4.0"
     package = tomllib.loads((root / "backend/pyproject.toml").read_text(encoding="utf-8"))
     assert package["project"]["version"] == __version__
     for name in ["package.json", "package-lock.json"]:

@@ -1,8 +1,9 @@
 # V04-008 Benchmark Dashboard (development)
 
-Status: implementation and automated checks complete; acceptance **PARTIAL** because browser tools
-could not start. V0.4 has not been released. No backend endpoint, schema, scoring, Provider, circuit
-or CLI behavior changes are part of this task.
+V04-008 baseline: implementation and static checks complete, browser acceptance **PARTIAL**.
+V04-009 browser completion: **PASS**, 14 executed scenarios; evidence recorded below.
+V0.4 has not been released. No new product feature, endpoint, schema, scoring rule or Provider is
+introduced by Dashboard acceptance.
 
 ## Usage and meaning
 
@@ -34,7 +35,8 @@ or CLI behavior changes are part of this task.
 Benchmark execution is an explicit local CLI action and may consume Provider API credits. There is
 no Run/Retry button, key entry, shell/CLI invocation, write request or quality-suite control in the UI.
 The page uses only the existing API URL configuration and GET endpoints. No mock fallback is shipped
-in production; test fixtures live exclusively under frontend/tests.
+in production. UI fixtures live under frontend/tests; the isolated fake-provider acceptance backend
+lives under scripts and is not the production application entry point.
 
 ## Loading, errors and Refresh
 
@@ -59,7 +61,7 @@ Only allowlisted detail.code is retained. Raw exception text, stack traces and a
 payloads are not rendered. All data text is React-escaped. Semantic labels accompany colors; labelled
 forms/buttons, keyboard-focusable scrolling tables and normal disclosure controls are provided.
 
-## Automated validation evidence (2026-09-21)
+## Historical V04-008 validation baseline (2026-09-21)
 
 - Backend pytest: 990 passed, 2 existing dependency deprecation warnings; Ruff: passed.
 - Frontend npm test: 50 passed. Node's built-in runner and installed TypeScript/React are reused,
@@ -74,58 +76,138 @@ forms/buttons, keyboard-focusable scrolling tables and normal disclosure control
 
 These are helper/static-render tests, **not browser interaction or layout tests**. They do not prove
 actual clicks, focus, viewport overflow, console/network behavior or the full mounted effect lifecycle.
-BROWSER_INTERACTION = NOT_RUN. Desktop/narrow visual acceptance and screenshots = NOT_RUN.
+At that handoff, BROWSER_INTERACTION = NOT_RUN; desktop/narrow layout and screenshots = NOT_RUN.
 Browser/Node UI tooling failed during startup with a sandbox helper setup error / kernel exit.
 No permission or organization restriction was bypassed to produce preview evidence.
 
-## Repeatable isolated browser acceptance (pending)
+## V04-009 execution environment and current record
 
-Use two local terminals in frontend; these commands affect only this explicit test session, not
-production service configuration. No populated .env or user database is used or modified.
+The normal execution/browser tool failed while starting its sandbox helper, before application
+inspection. Approved local execution found an existing Chrome 153 browser and installed Playwright;
+headless launch with `chromiumSandbox: true` succeeds. No global security policy was changed, browser
+sandbox disabled, or duplicate browser downloaded. The initial isolated frontend hit a cross-drive
+dependency-junction startup issue; the test-only launcher was corrected and full browser execution
+then passed repeatedly, including after the 0.4.0 metadata update. This was a service harness issue,
+not an application defect or browser launch failure.
 
-Terminal 1:
+| Acceptance item | Result |
+| --- | --- |
+| Actual browser interactions | PASS — 14 scenarios in `npm run test:browser` |
+| Desktop 1440×1000 / narrow 390×844 | PASS — layout assertions and screenshot inspection |
+| Keyboard/focus and table scrolling | PASS — Tab/Enter, visible focus and horizontal scroll |
+| Delayed-response and loading races | PASS — older result/error cannot replace or clear the current state |
+| Error/timeout/module isolation | PASS — includes actual browser deadline and retry |
+| Real frontend → real backend → temporary SQLite → Fake Provider | PASS — separate unmocked API context |
+| Console/network and no execution requests | PASS — 0 uncaught errors; all 81 recorded API requests GET |
+| Screenshots/traces/results.json inspected | PASS — evidence saved separately from source control |
+| Real cloud Provider calls | NOT_RUN; prohibited during acceptance |
+
+Observed browser: **Chrome 153.0.8010.48**, Playwright headless with browser sandbox enabled.
+The recorded 81 requests comprise 64 controlled-state and 17 real-backend page requests. Seven console
+resource errors belong exclusively to deliberately injected state-test 404/503/500/network failures;
+there are no uncaught page/hydration errors and no real-context console errors. The request bound
+passed without an infinite loop; no execution or mutating UI request was issued. The timeout scenario
+completed in about 10.2 seconds, and the Refresh control recovered.
+
+The full backend reports 1003 passing tests, including two tests of the real fake-provider acceptance
+harness. Frontend helper/static-rendering tests report 50 passing tests. These checks remain separate
+from the executed browser evidence. See [COMPLETION.md](COMPLETION.md) for final release gates.
+
+## Repeatable isolated browser acceptance
+
+Use PowerShell 7, the installed backend environment and `frontend/node_modules`. The launcher
+downloads nothing. From the repository root, Terminal 1:
 
 ```powershell
-npm run test:fixtures
+pwsh -File .\scripts\start-dashboard-acceptance.ps1 -DurationSeconds 900 -KeepArtifacts
 ```
 
-Terminal 2:
+The launcher creates a fresh direct child of the OS temporary directory for the backend test database
+and logs, plus `.artifacts/acceptance-frontend-<GUID>` under the repository for the isolated frontend.
+The same-drive frontend directory avoids the earlier dependency-junction problem. It prints the
+resource path and starts only loopback services at `http://127.0.0.1:8766` (backend) and `http://127.0.0.1:3100`
+(Dashboard). It rejects occupied ports rather than stopping existing services. It copies an
+allowlisted frontend source set without any `.env`, supplies a restricted process environment without
+Provider credentials, and uses a new test SQLite database. It does not inspect user database content.
+Use `-BackendPort` / `-FrontendPort` only when necessary and match the URLs in the browser environment.
+
+Terminal 2, from the repository root, with the path of an **existing** installed Chromium-compatible
+browser (the example must exist locally):
 
 ```powershell
-$env:NEXT_PUBLIC_MODELPILOT_API_URL = 'http://127.0.0.1:8765'
-npm run dev -- --hostname 127.0.0.1 --port 3100
+Set-Location frontend
+$env:ACCEPTANCE_BROWSER_PATH = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+npm run test:browser
 ```
 
-Open http://127.0.0.1:3100. Every screenshot must be captioned **TEST DATA**, never real model quality.
-The fixture API is loopback-only and separate from the product. Stop both processes when finished;
-remove the temporary process environment variable before starting against a real API.
+No browser download is part of this command. If using a different installed Chrome/Edge path, replace
+only that explicit value. `ACCEPTANCE_URL` and `ACCEPTANCE_API_URL` default to the loopback URLs above;
+set them only if launcher ports changed. The browser test refuses non-loopback acceptance service URLs
+and blocks external page requests. It creates new isolated browser contexts, never reuses a personal
+profile, and launches with Chromium sandbox enabled.
 
-1. At 1440px and 390px widths, verify original Summary/Health/Routing/Failures and new panels.
-   No whole-page overflow; case/category tables should scroll horizontally and be keyboard focusable.
-2. Inspect Network: initial load has one run-list fetch per active mount, no detail/quality request.
-   React development Strict Mode may cancel its first mount request; this is not polling.
-3. Type a filter without submitting: no new request. Apply openai + test-model-a +
-   historical-test-data + version 1: only fixture-run-a. Apply unknown provider: filtered empty state.
-   Clear/apply to recover the list. Check URL-encoded combined filters.
-4. View fixture-run-a: confirm 0.000, 1.000 and Unscored/authentication_error, only three case rows
-   despite four total cases, saved config and UTC timestamps. fixture-run-b includes timeout.
-5. Query current quality for that target: configured-test-data v2 differs from the historical suite.
-   Confirm separate score/confidence/coverage/completeness, latest completeness 20%, source run IDs
-   and snapshot-calculated timestamp. Expand provenance. Category display is not a routing claim.
-6. Enter provider openai and model smoke: score 1.000 with confidence 0% and insufficient-evidence
-   notice. Enter no-evidence, not-configured, error, server-error and network-error to exercise their
-   distinct states. SECRET_TEST_MARKER or /private/database.sqlite must never appear in the page.
-7. Submit slow-a then immediately fast-b: late A must not replace B or clear B's loading state.
-   Submit timeout: error within about 10 seconds; other sections stay usable. Navigate away while
-   loading and verify no stale completion warning.
-8. Change input drafts without submitting, then Refresh: use applied filters/selected target, not
-   drafts; selected run details also reload. Editing/submitting only quality must not refetch all rows.
-9. Detail-404 and unfiltered-empty UI states have static tests; additionally use browser local response
-   overrides to return 404 for the clicked detail and [] for the unfiltered list (test origin only).
-10. Inspect console/network for unexpected failures (deliberately injected failures excepted).
-    Product UI requests must all be GET and have no execution endpoint. Read fixture request journal
-    at http://127.0.0.1:8765/__test/requests; reset it through /__test/reset before a scenario if useful.
+The command implements two distinct verification modes:
 
-Record actual browser/version, desktop/narrow screenshots, console/network observations and any
-defects before changing the task's acceptance from PARTIAL to PASS. Do not substitute an HTTP 200
-or successful production build for this acceptance.
+1. **Browser state tests:** real rendered frontend with controlled HTTP responses. This enables
+   deterministic loading/404/503/network/timeout, stale-result/loading, long-identity and empty states.
+   Fixture labels include TEST DATA. These tests do not claim a real API/database connection.
+2. **Full connection test:** a new context sends unmocked Benchmark GET requests to the real local
+   backend. Real Runner + Fake Provider + Evaluator generated and persisted the records. It reads
+   60-case results, quality and stored production-route provenance through real API/SQLite components.
+   The fake cloud-free provider is not a JSON substitute for that connection.
+
+### Expected interactions and evidence
+
+| Action | Expected result | Evidence to record |
+| --- | --- | --- |
+| Initial page load | Latest 20 matching runs; no eager detail/quality requests | Network requests and initial list assertion |
+| Fill all four filters, then Apply/Enter | No requests on typing; exact combined encoded filters on submit | Request URL and resulting row count |
+| Apply nonexistent filter, clear, then unfiltered empty | Distinct no-match/no-record messages; list recovers | Browser assertions and rendered state |
+| Select a Run with Enter/click | On-demand details, saved config, ordered indexes | Request timing and case-row assertions |
+| Inspect wrong answer, timeout, auth partial Run | Real 0.000 vs Unscored; no fabricated unattempted rows | Detail screenshot and case assertions |
+| Select missing Run | Detail 404 state; other modules continue | Isolated 404 assertion |
+| Query target/current quality | Separate quality/confidence/coverage/completeness; suite mismatch warning | Quality screenshot and provenance assertions |
+| Expand source IDs | Source IDs/latest-run completeness trace old evidence | Expanded disclosure in screenshot/trace |
+| Query smoke fixture | Quality 1.000, confidence 0%, insufficient-evidence notice | Exact score/confidence assertions |
+| Query 404, configured-suite 503, other 503/500/network | Correct safe states; no raw secret/error payload | Allowlisted error assertions and expected failure log |
+| Delay A, choose B, return A first or last | A cannot overwrite B or clear B's loading | Controlled response ordering and final target assertion |
+| Leave a response hanging | About 10-second deadline, safe error, Refresh stays usable | Timed browser assertion and retry |
+| Change unsaved drafts, then Refresh | Existing applied filters/target/details and metrics/health refresh | Network query journal; drafts absent from requests |
+| Desktop/narrow and long identity fixture | No document overflow; tables scroll; focused controls visible | 1440×1000 and 390×844 screenshots/layout assertions |
+| Tab, Enter and focused scroll region | Core actions keyboard-operable, not color-only | Focus/navigation assertions and trace |
+| Inspect console/network | No uncaught/hydration errors, request loop or execution/write requests | Recorded errors separated from injected failures; all UI API methods GET |
+| Real-backend target openai/test-model-a | 60 evaluated cases, quality/confidence 1, genuine stored provenance | Unmocked real API assertions and screenshot |
+| Real-backend mixed Gemini Run | Wrong-answer zero, timeout/rate_limit/auth null evaluation, early stop | Actual backend/SQLite case details in browser |
+
+Every screenshot is **TEST DATA**, not real model quality evidence. Default ignored artifacts are
+`.artifacts/v04-009-browser/` relative to the repository root:
+
+- `results.json`: browser version, viewports, scenario results and console/network observations;
+- `TEST-DATA-*.png`: details, quality, configuration error, narrow view and real-backend screenshots,
+  including `TEST-DATA-long-details-narrow.png` and `TEST-DATA-long-quality-narrow.png`;
+- `TEST-DATA-state-trace.zip` and `TEST-DATA-real-trace.zip`: separate contexts and modes;
+- `TEST-DATA-failure.png` when a scenario fails.
+
+The launcher also retains `*.test-data.log` and the test database at its printed temporary path when
+`-KeepArtifacts` is used. Review before sharing; do not commit SQLite/WAL/SHM, screenshots, traces,
+build output or large test reports. Capture paths and actual results in this document instead.
+
+### Stopping and cleanup
+
+The sample launcher stops after 900 seconds; omit DurationSeconds for interactive Enter shutdown.
+Let its cleanup finish rather than force-closing the terminal. It stops only its own process tree,
+removes its dependency junction without following it,
+then removes the validated `.artifacts/acceptance-frontend-<GUID>` copy, even with `-KeepArtifacts`.
+It never stops a process merely because it occupies a port. With `-KeepArtifacts`, it prints the
+exact directory-specific cleanup command after the owned services stop. Inspect the printed resolved
+path and evidence first, then run only that command. Without `-KeepArtifacts`, the validated fresh
+temporary directory is removed automatically. Clear temporary `ACCEPTANCE_*` environment settings
+from Terminal 2 after inspection. A force-cancel of a tool/terminal can bypass PowerShell finally:
+this was observed during acceptance. In that case, inspect only the printed session resource paths
+and owned process IDs; never kill by a shared port/name or recursively remove a dependency junction.
+Remove that session's junction itself before deleting its exact validated temporary frontend copy.
+Timed shutdown was used for the final run to retain logs and perform normal cleanup.
+
+An HTTP startup smoke check (`-SmokeTest`) proves only services/API availability, not browser behavior.
+If legal available browser execution remains blocked, preserve PARTIAL and use this launcher for
+actual operator acceptance; do not tick the table PASS on the operator's behalf.

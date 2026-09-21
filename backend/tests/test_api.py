@@ -41,7 +41,7 @@ def test_health() -> None:
         response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "0.3.0"}
+    assert response.json() == {"status": "ok", "version": "0.4.0"}
 
 
 def test_chat_completions_is_openai_compatible() -> None:

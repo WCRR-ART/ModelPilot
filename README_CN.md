@@ -10,10 +10,14 @@ ModelPilot 为应用提供一个 OpenAI 兼容的聊天补全入口，并将 Pro
 它以确定性方式排序已配置模型，在调用失败时尝试下一候选，并记录本地运行证据，使后续决策可以
 使用实测延迟、可靠性和估算成本。
 
-## V0.3 功能
+## 版本状态与功能
 
 当前正式稳定版本为 **0.3.0**，已发布：
 [ModelPilot v0.3.0](https://github.com/WCRR-ART/ModelPilot/releases/tag/v0.3.0)。
+
+当前工作分支目标为 **v0.4.0 — Benchmark-Driven Quality Routing**，尚未发布。
+下文描述本分支能力，不代表旧稳定版已包含这些功能。本地验收结果和剩余门槛见
+[V0.4 完成记录](docs/v0.4/COMPLETION.md)，[v0.4.0 Release Notes](docs/releases/v0.4.0.md) 仍为草稿。
 
 ### Gateway
 
@@ -26,7 +30,7 @@ ModelPilot 为应用提供一个 OpenAI 兼容的聊天补全入口，并将 Pro
 - 基于配置价格元数据和 Provider 报告 token usage 的 Decimal 成本估算
 - 使用 SQLite 持久化 attempts、价格元数据与结构化路由决策
 - 对延迟、可靠性和成本信号进行 confidence blending
-- quality 始终使用静态配置；不声称具有 benchmark quality 数据
+- 可选的 benchmark quality confidence blending；默认或证据不可用时使用静态 quality
 - 区分 Router 首选与实际服务 Provider 的结构化路由解释
 
 ### Observability
@@ -41,6 +45,13 @@ ModelPilot 为应用提供一个 OpenAI 兼容的聊天补全入口，并将 Pro
 - 单进程内只允许一个恢复探测并发执行，成功后自动恢复
 - 包含健康依据及未评分排除项的结构化路由解释
 - 只读 Provider Health API 与 Dashboard 健康状态展示
+
+### Benchmarks（V0.4）
+
+- 显式本地 JSON suite 与五种有版本的确定性 evaluator；没有 LLM judge
+- 对显式 Provider/模型进行有界、顺序 CLI 执行
+- SQLite Run/case 原子持久化、只读 Run/Quality API 与只读 Dashboard
+- 基于独立 case 的质量证据、严格 suite identity 检查与可溯源路由解释
 
 ## 技术栈
 
@@ -76,9 +87,9 @@ Provider HTTP 转换集中在 `backend/src/modelpilot/providers/`。metrics 写�
 cp .env.example .env
 cd backend
 python -m venv .venv
-# Windows: .venv\Scripts\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 python -m pip install -e ".[dev]"
-python -m uvicorn modelpilot.main:app --reload --env-file ../.env
+python -m uvicorn modelpilot.main:app --host 127.0.0.1 --reload --env-file ../.env
 ```
 
 另开终端启动 Dashboard：
@@ -88,13 +99,15 @@ cd frontend
 npm ci
 export NEXT_PUBLIC_MODELPILOT_API_URL=http://localhost:8000
 # PowerShell: $env:NEXT_PUBLIC_MODELPILOT_API_URL="http://localhost:8000"
-npm run dev
+npm run dev -- --hostname localhost
 ```
 
 API 和 Dashboard 默认位于 `http://localhost:8000` 与 `http://localhost:3000`。API 地址不同时，
 请设置 `NEXT_PUBLIC_MODELPILOT_API_URL`。Next.js 不读取仓库根目录的 `.env`，
 需要像上例一样导出该公开 URL，或仅将这一项写入 `frontend/.env.local`。
 未设置时前端使用同源 API 路径，需要自行配置反向代理。该 URL 在构建时注入，不能包含凭据。
+系统没有鉴权，开发服务应只绑定 loopback，不要直接公开 API 或 Dashboard。
+需要恢复探测 single-flight 保证时，后端应使用单进程。
 
 ## API 示例
 
@@ -131,12 +144,12 @@ auto Router 会排除未配置 API Key 的 Provider 和 OPEN circuit，为每个
 请求偏好，并且每个请求只排序一次。fallback 遵循固定顺序，不会在 attempts 之间重新排名。
 调用前会再次核对健康资格；HALF_OPEN 候选必须先取得进程内 probe lease。
 
-- **Quality：**始终使用配置的静态 baseline。
+- **Quality：**默认使用静态 baseline；可选地与兼容 benchmark 证据混合，规则见下文。
 - **Latency：**数据可用时，将静态 baseline 与实测 p50 延迟混合。
 - **Reliability：**将静态 baseline 与经过平滑处理的实测成功率混合。
 - **Cost：**存在有价格样本时，将静态 baseline 与 p50 请求估算成本混合。
 
-缺失的维度继续使用静态 baseline。这是确定性的运行数据路由，不是 ML Router，也不是 Provider benchmark。
+缺失的维度继续使用静态 baseline。这是确定性路由，不是 ML Router，也不代表某模型在所有场景都更优。
 
 ### 路由置信度
 
@@ -183,6 +196,8 @@ completed attempt 信号与有价格成本样本分别计算 confidence：
 显式模型请求仍保持确定性并返回 `served_by`，但不会生成自动路由 explanation，
 不进行 auto 健康过滤，也不会偷偷换 Provider。上例是简化结构，不是实测 benchmark。
 V0.3 候选还包含 `health` 依据和 `excluded_candidates`，被排除项没有 rank 或 score。
+配置 quality suite 后，routing version 为 `v0.4`；候选解释还包含 static/benchmark quality、confidence、
+suite identity、来源 Run ID 和最新 Run 完整度。显式模型请求不查询 benchmark quality。
 
 ## Circuit Breaker 工作原理
 
@@ -223,9 +238,9 @@ completed attempts 默认写入 `./data/modelpilot.db`。聚合对每个 Provide
 最新的 **100 次 attempts**。这是查询窗口而不是数据库自动保留策略；不会自动删除更早的持久化记录。
 
 Provider 未返回或返回无效 usage 时，token 数保持 `null`。失败记录只保存有界且脱敏的错误类别。
-当前 schema version 为 3，支持 v1 经 v2 升至 v3，以及 v2 升至 v3。
-新增 provider health 表，同时保留 attempts、pricing 和 routing decisions。
-缺少 health 字段的旧 V0.2 explanation JSON 仍可读取。SQLite 使用 WAL，自动创建存储目录；
+本分支使用 schema **4**：新数据库直接初始化为 v4，v1/v2/v3 按既有链路升级，
+保留 attempts、pricing、routing decisions 和 provider health，并增加独立的 benchmark Run/case 表。
+旧 V0.2/V0.3 explanation JSON 仍可读取。SQLite 使用 WAL，自动创建存储目录；
 相对路径以启动后端的工作目录为基准。
 
 ### 估算成本
@@ -262,11 +277,19 @@ Provider Health 展示 Healthy / Open / Recovering、连续失败数、UTC 冷�
 以及最近成功/失败。无历史记录时明确提示，null 时间显示破折号。
 同一个 Refresh 同时刷新 metrics 和 health；页面没有状态修改按钮。
 
+Benchmark 区域展示最近 20 条匹配 Run，不代表全部历史。四项 Provider/model/suite/version 过滤在 Apply
+后生效，详情在选择后加载。显式 Provider/模型查询展示当前配置 suite 的 quality、coverage、execution
+completeness、启发式 confidence、分类证据、来源和最新 Run 完整度。历史 Run 详情不等于当前 Quality
+快照；真实零分显示为零，缺失 evaluation 显示不可用。Refresh 保留已应用条件和选择。
+没有 benchmark 执行按钮或自动轮询。[Dashboard 验收记录](docs/v0.4/DASHBOARD.md) 单独记录交互与布局证据。
+
 ## 隐私
 
 Metrics 与 health 数据库**不会**持久化 prompt、completion、API Key、Authorization header 或 Provider 原始错误体。
 持久化内容仅包括 request ID、Provider/模型、时间、延迟、有界错误类别、nullable usage、成本估算和
 路由和健康元数据。Provider 凭据仅保留在进程环境中；路由与健康解释不暴露凭据或 secret。
+Benchmark 同样不保存原始 prompt、标准答案、模型输出或凭据，只保存评分、标准化执行元数据和溯源信息。
+Suite 文件本身包含 prompt 和预期答案，应作为主动选择的本地数据管理，不要在其中放置 secret。
 
 ## 环境变量
 
@@ -275,6 +298,7 @@ Metrics 与 health 数据库**不会**持久化 prompt、completion、API Key、
 | `MODELPILOT_CORS_ORIGINS` | Dashboard 允许的来源，多个值用逗号分隔 | `http://localhost:3000` |
 | `MODELPILOT_REQUEST_LOG_LIMIT` | 进程内请求日志最大条数 | `500` |
 | `MODELPILOT_METRICS_DB` | SQLite metrics 数据库路径 | `./data/modelpilot.db` |
+| `MODELPILOT_QUALITY_SUITE_PATH` | 可选 overall quality 路由与 Quality API 使用的显式本地 suite | 未设置/空值：禁用 |
 | `MODELPILOT_CIRCUIT_FAILURE_THRESHOLD` | 打开 circuit 的连续计数失败阈值；整数 >= 1 | `3` |
 | `MODELPILOT_CIRCUIT_COOLDOWN_SECONDS` | 冷却秒数；整数 >= 0 | `60` |
 | `OPENAI_API_KEY` | 启用 OpenAI Provider | 未设置 |
@@ -292,16 +316,64 @@ Metrics 与 health 数据库**不会**持久化 prompt、completion、API Key、
 auto Router 已过滤 OPEN 状态；已有 OPEN/冷却期或时间顺序规则拒绝转换时，保留健康状态并记录 warning，
 attempt metrics 仍然照常记录。
 
-## V0.3 限制
+## Benchmark 执行与质量语义
 
-V0.3 不包含分布式 circuit breaker、多进程 probe 协调、手动 circuit 控制、circuit 事件历史、
-后台健康检查、鉴权、多用户/多租户、计费支付、streaming、benchmark engine、ML/AI Router、
-Redis、PostgreSQL、新增 Provider 扩展或实时价格同步。SQLite 面向单个本地 ModelPilot 实例。
+安装后端，并主动在进程环境中设置所选 Provider 凭据后，从 `backend` 目录运行：
+
+```bash
+python -m modelpilot.benchmarks.cli run --suite ../benchmarks/suites/smoke-v1.json --provider openai --model YOUR_MODEL --max-cases 100 --timeout 30
+```
+
+请主动替换 `YOUR_MODEL`。这个命令可能产生真实 Provider 费用；项目验收使用 Fake Provider，不能据此声称
+云端 Provider 兼容性已经实测。CLI 不会自动加载 `.env`。suite/provider/model 必须显式指定，拒绝 `auto`。
+每个 case 按序调用一次，不 retry、不 fallback。认证失败时停止后续 case，保存已有结果后退出 3。
+普通 Provider 失败或答错仍可保存并退出 0；参数/配置错误退出 2；系统/持久化错误退出 4。
+这些上限不是金额预算，temperature=0 也不保证 Provider 输出逐字复现。
+
+HTTP 和 Dashboard 只读：`GET /v1/benchmarks/runs`、`/v1/benchmarks/runs/{run_id}` 与
+`/v1/benchmarks/quality?provider=...&model=...`。列表默认 limit=20、最大 100。
+未配置 suite 返回 503 `quality_suite_not_configured`；无匹配质量证据返回 404，不伪造零分。
+GET 不执行 benchmark、不修改健康状态或领取 probe。完整用法见 [CLI/API 说明](docs/v0.4/BENCHMARKS.md)。
+
+Quality 只表示指定 suite 和 evaluator 规则下的表现：
+
+- 答错是有效的 **0 分**，必须进入加权 quality 平均值。
+- 执行失败为 `evaluation=null`，降低 completeness/confidence，不直接当作 quality=0。
+- coverage = observed unique cases / suite cases；execution completeness = evaluated unique cases /
+  suite cases。无 evaluated case 时 quality=null、confidence=0。
+- provider、model、suite ID、version、fingerprint 必须严格匹配，不混合不兼容历史。
+- 每题以 `(run.finished_at, run_id)` 判定最新 attempt；新失败会移除旧分数。
+  部分 Run 未执行的 case 可保留旧证据，但 latest-run diagnostics 必须明确最新 Run 的实际覆盖情况。
+- confidence = `clamp((n-5)/45, 0, 1) × weighted_evaluation_coverage × execution_completeness`，
+  `n` 为独立 evaluated case 数。重复执行同题不增加独立样本；category 只使用自身样本数。
+  confidence 是启发式混合权重，**不是统计置信区间**。
+- 三题 smoke 全对时 quality=1、confidence=0，不能证明模型综合能力。Router 只使用 overall quality，
+  category 仅作为证据展示，不做任务分类或分类路由。
+
+显式设置 `MODELPILOT_QUALITY_SUITE_PATH` 才启用 quality blending；空值继续使用静态 quality。
+相对路径以启动后端的工作目录为准，suite 在启动时只加载一次，修改后须重启。
+显式非法路径或 suite 导致启动报错；运行时证据读取/聚合故障则记录脱敏 warning 并回退静态 quality。
+混合公式为 `static × (1-confidence) + quality × confidence`，不再重复乘 coverage。
+健康过滤优先；benchmark 高分不能绕过 OPEN circuit。
+
+每次 quality 查询读取聚合**全部精确匹配历史**，不是 Run 列表最近 20 条；没有缓存、TTL 或自动过期，
+历史增长会增加逐请求开销。旧证据可能继续参与，应检查来源 Run、其时间与最新 Run 完整度。
+`generated_at` 是快照计算时间，不是模型作答时间。QualitySnapshot 不持久化。
+精确规则见 [EVALUATION.md](docs/v0.4/EVALUATION.md)。
+
+## 当前限制
+
+本分支不包含分布式 circuit breaker、多进程 probe 协调、手动 circuit 控制、circuit 事件历史、
+后台健康检查、鉴权、多用户/多租户、计费支付、streaming、HTTP/UI benchmark 执行、scheduler、LLM judge、
+任务/category classifier、ML/AI Router、Redis、PostgreSQL、新增 Provider 扩展或实时价格同步。
+SQLite 面向单个本地 ModelPilot 实例。
 
 ## 存储回滚
 
-升级前停止应用，备份 SQLite（包括尚未合并的 WAL 数据）。V0.3 将 schema v1/v2 升级到 v3，
-拒绝未知的更高版本，不提供向下迁移。回滚 V0.2 时需恢复升级前备份，V0.2 无法打开 schema-v3 数据库。
+首次用 V0.4 打开旧库前，停止应用和 CLI 等所有写入者，并创建一致性 SQLite 备份。
+不要仅复制正在使用的 `.db` 而遗漏尚未合并的 WAL 数据。Schema 4 没有自动向下迁移，
+正式 v0.3.0 会拒绝 schema 4；回退旧程序必须使用兼容的升级前备份，不能只修改版本标记。
+已验证的备份/恢复命令和临时数据库迁移证据见 [V0.4 完成记录](docs/v0.4/COMPLETION.md)。
 
 ## 验证
 
@@ -312,17 +384,18 @@ python -m ruff check .
 
 cd ../frontend
 npm ci
+npm test
 npm run lint
 npm run typecheck
 npm run build
 npm audit
 ```
 
-## V0.4 开发版：Benchmark
-
-当前开发分支提供只读 Benchmark HTTP 查询与显式本地 CLI 执行（可能产生 Provider 费用）。
-命令、配置和退出码见 [Benchmark 使用说明](docs/v0.4/BENCHMARKS.md)。开发版使用 schema 4；
-升级前请备份数据库，回退 v0.3.0 时须恢复备份。不提供 HTTP 执行入口或 Benchmark Dashboard。
+后端测试使用 Fake Provider 和临时数据库。前端 `npm test` 是 helper/静态渲染测试，不替代浏览器验收。
+浏览器交互/布局、真实本地前后端/SQLite 完整连接、实际命令、数量和证据分别记录在
+[DASHBOARD.md](docs/v0.4/DASHBOARD.md) 与 [COMPLETION.md](docs/v0.4/COMPLETION.md)。
+真实云端 Provider 验收为 **NOT_RUN**；合成 fixture 成绩不是模型真实质量实测。
+尚未 push 的发布准备提交，其远端 CI 为**待验证**，不能写成已通过。
 
 ## 贡献
 

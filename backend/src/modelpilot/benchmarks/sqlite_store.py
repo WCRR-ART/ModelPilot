@@ -62,9 +62,18 @@ class SQLiteBenchmarkStore(SQLiteDatabase):
                 return None
             return _restore_run(connection, row)
 
-    def list_runs(self, limit: int = 20) -> list[BenchmarkRun]:
+    def list_runs(
+        self, limit: int = 20, *, provider: str | None = None, model: str | None = None,
+        suite_id: str | None = None, suite_version: str | None = None,
+    ) -> list[BenchmarkRun]:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ValueError("limit must be an integer between 1 and 100")
+        filters = {
+            "provider": provider, "model": model, "suite_id": suite_id,
+            "suite_version": suite_version,
+        }
+        selected = {key: value for key, value in filters.items() if value is not None}
+        where = " WHERE " + " AND ".join(f"{key} = ?" for key in selected) if selected else ""
         with self._connect() as connection:
             connection.execute("BEGIN")
             if connection.execute(
@@ -73,8 +82,9 @@ class SQLiteBenchmarkStore(SQLiteDatabase):
             ).fetchone():
                 raise BenchmarkStoreDataError("orphan benchmark case results")
             rows = connection.execute(
-                "SELECT * FROM benchmark_runs ORDER BY started_at DESC, run_id DESC LIMIT ?",
-                (limit,),
+                "SELECT * FROM benchmark_runs" + where
+                + " ORDER BY started_at DESC, run_id DESC LIMIT ?",
+                (*selected.values(), limit),
             ).fetchall()
             return [_restore_run(connection, row) for row in rows]
 

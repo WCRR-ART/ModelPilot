@@ -318,6 +318,12 @@ npm run build
 npm audit
 ```
 
+## V0.4 开发版：Benchmark
+
+当前开发分支提供只读 Benchmark HTTP 查询与显式本地 CLI 执行（可能产生 Provider 费用）。
+命令、配置和退出码见 [Benchmark 使用说明](docs/v0.4/BENCHMARKS.md)。开发版使用 schema 4；
+升级前请备份数据库，回退 v0.3.0 时须恢复备份。不提供 HTTP 执行入口或 Benchmark Dashboard。
+
 ## 贡献
 
 开发环境、测试和 Pull Request 规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。

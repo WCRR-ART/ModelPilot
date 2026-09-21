@@ -92,6 +92,29 @@ Definitions, run provenance, evaluator versions and normalization are explicit. 
 content fingerprint and provider/model/settings so accidental reuse of a changed version can be
 detected in the later registry/store. V04-001 has no registry or global version uniqueness enforcement.
 
+## Read API and explicit CLI (V04-007)
+
+HTTP exposes only GET /v1/benchmarks/runs, /runs/{run_id}, and /quality. Routes depend on the
+benchmark store and the configured production BenchmarkQualityResolver, not Runner or Provider.
+Store construction/schema initialization happens at application startup, never in GET handlers.
+Run-list filters are applied in SQL before the bounded limit; details retain ordered case results.
+Quality reads reuse the overall/category aggregation contract without a second scoring formula.
+No suite is 503 quality_suite_not_configured; no matching history is 404 no_quality_evidence.
+Read/aggregation failures are explicit sanitized 503 errors, unlike Router's static fallback.
+
+The argparse CLI calls loader -> explicit target/config validation -> shared create_provider factory
+-> isolated BenchmarkRunner -> BenchmarkStore.save_run. It bypasses GatewayService, Router, health
+and probe coordination. Missing credentials fail before execution. Store initialization is checked
+before spending provider calls. Ordinary failed cases still form a valid saved run; authentication
+failure saves the partial/terminal run but exits nonzero. No scheduler or HTTP execution is added.
+Production and CLI share adapter construction unchanged. Schema remains 4. Saving adds only benchmark
+history; the next resolver read sees it naturally, without modifying production routing state.
+
+Application composition reuses the loaded suite and store. For injected gateways, their existing
+quality resolver is authoritative; no implicit settings file load occurs. An explicit API store
+override also supplies the API resolver's evidence, leaving the injected Router untouched.
+See BENCHMARKS.md for commands, bounds, response/error contracts and exit codes.
+
 ## Privacy and trust
 
 Only user-selected local files are read. JSON is data: no import, eval, exec, network or code execution.

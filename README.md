@@ -334,6 +334,13 @@ npm run build
 npm audit
 ```
 
+## V0.4 development: benchmarks
+
+The current development branch provides read-only benchmark HTTP inspection and explicit local CLI
+execution (which can incur Provider charges). See [benchmark usage](docs/v0.4/BENCHMARKS.md) for exact
+commands, configuration and exit codes. Development storage uses schema 4; back up before upgrading
+and retain that backup to return to v0.3.0. No HTTP benchmark execution or benchmark Dashboard exists.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and pull-request guidance.

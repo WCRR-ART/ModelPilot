@@ -86,6 +86,9 @@ or global definition-identity collision enforcement is introduced.
 
 BenchmarkStore offers save_run, get_run (complete run or None), list_runs (complete runs; default 20,
 integer limit 1..100, SQL LIMIT), and list_case_results (ordered tuple, empty for missing run).
+V04-007 extends list_runs with optional exact provider/model/suite_id/suite_version filters,
+combined before LIMIT. HTTP lists project safe metadata only; details add zero-based case_index
+without changing persisted domain models. No schema change is required.
 V04-006 adds list_matching_runs(provider, model, suite_id, suite_version, suite_fingerprint):
 all exactly matching runs ordered by finished_at/run_id, read in one consistent transaction.
 It is intentionally not subject to the global recent-list limit.

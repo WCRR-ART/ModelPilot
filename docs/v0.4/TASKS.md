@@ -1,7 +1,7 @@
 # V0.4 Implementation Tasks
 
-Each task is a focused independently validated commit. V04-001 through V04-006 are implemented;
-V04-007 and later task descriptions remain plans, not completed features.
+Each task is a focused independently validated commit. V04-001 through V04-007 are implemented;
+V04-008 and later task descriptions remain plans, not completed features.
 
 | Task | Name | Goal and acceptance gate |
 | --- | --- | --- |

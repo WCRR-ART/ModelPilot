@@ -141,4 +141,68 @@ when all answers are correct. Enabling a suite does not execute or save benchmar
 
 Only stored runs matching provider, model, suite ID, version and fingerprint are considered.
 Missing evidence and runtime read/aggregation failures use static quality; failures log sanitized
-warnings. No category classifier, quality API, Dashboard or LLM judge is introduced.
+warnings. V04-007 adds read-only quality inspection below, not a classifier, Dashboard or LLM judge.
+
+## Read-only HTTP API (V04-007)
+
+These endpoints never execute a benchmark or call a Provider:
+
+- GET /v1/benchmarks/runs: array of run summaries, no case_results/config. Optional exact provider,
+  model, suite_id and suite_version filters combine with AND, before limit (default 20, range 1..100).
+  Order is started_at DESC, then run_id DESC, matching Store. Invalid limits return 422.
+- GET /v1/benchmarks/runs/{run_id}: run metadata, config and ordered case_results with zero-based
+  case_index. Score zero stays zero, failed evaluation stays null, missing usage stays null.
+  Unknown IDs return 404 with detail.code=benchmark_run_not_found.
+- GET /v1/benchmarks/quality?provider=openai&model=YOUR_MODEL: explicit non-auto target required.
+  Uses MODELPILOT_QUALITY_SUITE_PATH, exact identity/fingerprint matching and the existing resolver.
+  Returns the existing QualitySnapshot, including category snapshots, confidence, coverage,
+  completeness, provenance and latest-run diagnostics. Missing/invalid target returns 422.
+
+No configured quality suite returns 503 detail.code=quality_suite_not_configured. No matching runs
+returns 404 detail.code=no_quality_evidence (resolver's existing None semantics), not quality zero.
+Store/corruption/aggregation errors return 503 detail.code=benchmark_data_unavailable with a generic
+warning; exception text, paths and secrets are omitted. UTC timestamps use ISO-8601; scores remain
+floats. Responses never include prompts, raw outputs or environment settings. There are no write or
+execution routes. These unauthenticated local inspection APIs should not be exposed publicly.
+
+## Explicit local CLI (V04-007)
+
+From the repository's backend directory, using the installed backend environment:
+
+```bash
+python -m modelpilot.benchmarks.cli run --suite ../benchmarks/suites/smoke-v1.json --provider openai --model YOUR_MODEL --max-cases 100 --timeout 30
+```
+
+Replace YOUR_MODEL with the exact model you intend to test. This explicitly makes real billable
+Provider calls when credentials are configured; examples are not executed automatically. The smoke
+suite is only a small integration check and cannot provide routing confidence. No auto/default suite
+or target, fallback, retries, remote execution, background tasks or downloads are supported.
+
+Required flags: --suite (local file), --provider (openai/gemini/deepseek), --model (explicit, not auto).
+Optional: --max-cases (100), --timeout (30 seconds per case), --temperature (0), --json (safe summary).
+Validation reuses BenchmarkRunConfig; max_tokens retains its bounded default of 1024. The case bound
+rejects oversized suites before any Provider call; it does not truncate them. Limits do not represent
+a monetary budget. Model selection uses --model, never the configured production default model.
+
+Credentials/base URLs use existing Settings environment variables. Missing selected credentials fail
+before execution. Like the backend, the CLI reads the process environment; it does not automatically
+load a populated .env file. Relative suite/DB paths resolve from the current working directory.
+The database uses MODELPILOT_METRICS_DB (default ./data/modelpilot.db); parents are created. Back up
+before opening an older database: existing schema migrations may run during initialization, with no
+new migration in this task. No production attempts, pricing, health or decisions are written.
+
+Every completed run is saved by default. Text/--json output includes run ID, suite/target, counts,
+status, terminated_early, authentication_error and saved confirmation; no cases/prompts/raw output.
+Use GET endpoints above to inspect saved case details. Results are immediately visible to an already
+running API/resolver pointing at the same database and matching configured suite.
+
+| Exit | Meaning |
+| --- | --- |
+| 0 | Run saved, including ordinary provider failures and wrong answers |
+| 2 | Invalid command/suite/target/configuration, oversized suite or unconfigured Provider |
+| 3 | Authentication failure; run saved, early termination explicitly reported when applicable |
+| 4 | Execution invariant/system/persistence failure; saving was not confirmed |
+
+Authentication failure on the final case also exits 3 even though terminated_early=false. Saving
+failure takes precedence and exits 4. Errors are stable sanitized messages, never raw exceptions.
+An interrupted invocation is not a completed run and has no partial checkpoint/retry guarantee.

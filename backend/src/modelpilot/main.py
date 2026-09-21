@@ -9,7 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from modelpilot import __version__
 from modelpilot.benchmarks import SQLiteBenchmarkStore, load_benchmark_suite
+from modelpilot.benchmarks.api import router as benchmark_router
 from modelpilot.benchmarks.resolver import BenchmarkQualityResolver
+from modelpilot.benchmarks.store import BenchmarkStore
 from modelpilot.config import Settings
 from modelpilot.health import ProviderHealthStore
 from modelpilot.health.api import router as health_router
@@ -18,7 +20,7 @@ from modelpilot.health.probes import HalfOpenProbeCoordinator
 from modelpilot.logging import RequestLogStore
 from modelpilot.metrics import MetricsStore, SQLiteMetricsStore
 from modelpilot.metrics.api import router as metrics_router
-from modelpilot.providers import DeepSeekProvider, GeminiProvider, OpenAIProvider
+from modelpilot.providers.factory import create_provider
 from modelpilot.router import ModelRouter, default_candidates
 from modelpilot.schemas import ChatCompletionPayload, ChatCompletionRequest, RequestLog
 from modelpilot.service import AllProvidersFailed, GatewayService, NoProviderAvailable
@@ -42,9 +44,7 @@ def build_gateway(
         if settings.quality_suite_path is not None else None
     )
     providers = {
-        "openai": OpenAIProvider(settings.openai_api_key, settings.openai_base_url, client),
-        "gemini": GeminiProvider(settings.gemini_api_key, settings.gemini_base_url, client),
-        "deepseek": DeepSeekProvider(settings.deepseek_api_key, settings.deepseek_base_url, client),
+        name: create_provider(name, settings, client) for name in ("openai", "gemini", "deepseek")
     }
     metrics_store = metrics if metrics is not None else build_metrics_store(settings)
     quality_source = (
@@ -84,17 +84,33 @@ def build_gateway(
 def create_app(
     settings: Settings | None = None,
     gateway: GatewayService | None = None,
+    benchmark_store: BenchmarkStore | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings.from_env()
+
+    def configure_benchmarks(app: FastAPI, service: GatewayService) -> None:
+        source = service.router.quality_source
+        resolver = source if isinstance(source, BenchmarkQualityResolver) else None
+        store = benchmark_store
+        if store is None and resolver is not None:
+            store = resolver.store
+        if store is None and gateway is None:
+            store = SQLiteBenchmarkStore(app_settings.metrics_db_path)
+        if resolver is not None and store is not resolver.store:
+            resolver = BenchmarkQualityResolver(resolver.suite, store, clock=resolver.clock)
+        app.state.benchmark_quality = resolver
+        app.state.benchmark_store = store
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if gateway is not None:
             app.state.gateway = gateway
+            configure_benchmarks(app, gateway)
             yield
             return
         async with httpx.AsyncClient(timeout=30) as client:
             app.state.gateway = build_gateway(app_settings, client)
+            configure_benchmarks(app, app.state.gateway)
             yield
 
     app = FastAPI(
@@ -112,6 +128,7 @@ def create_app(
     )
     app.include_router(metrics_router)
     app.include_router(health_router)
+    app.include_router(benchmark_router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

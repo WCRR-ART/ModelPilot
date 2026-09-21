@@ -7,7 +7,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --test tests/*.test.cjs",
+    "test:fixtures": "node tests/fixture-server.cjs"
   },
   "dependencies": {
     "next": "16.3.4",

@@ -438,3 +438,52 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
 }
+
+.benchmarkDashboard { min-width: 0; }
+.benchmarkDashboard .panel { min-width: 0; }
+.benchmarkNote { color: var(--muted); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; }
+.benchmarkForm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 14px;
+  align-items: end;
+  margin: 20px 0;
+}
+.benchmarkForm label { display: grid; min-width: 0; gap: 7px; color: var(--muted); font-size: 13px; }
+.benchmarkForm input {
+  min-width: 0;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--text);
+  background: var(--surface-raised);
+  font: inherit;
+}
+.benchmarkForm input:focus-visible,
+.benchmarkDashboard summary:focus-visible,
+.benchmarkDashboard .tableWrap:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.benchmarkDashboard button { min-width: 0; }
+.benchmarkMetadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 22px 0; }
+.benchmarkMetadata div { min-width: 0; }
+.benchmarkMetadata dt { margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+.benchmarkMetadata dd { margin: 0; overflow-wrap: anywhere; font: 13px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.benchmarkProvenance { margin: 20px 0; padding: 14px; border: 1px solid var(--line); overflow-wrap: anywhere; }
+.benchmarkProvenance summary { color: var(--cyan); cursor: pointer; }
+.benchmarkProvenance li { margin: 10px 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.benchmarkScores { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); margin: 20px 0; }
+.benchmarkScores article { display: grid; gap: 14px; padding: 20px; border-right: 1px solid var(--line); }
+.benchmarkScores article:last-child { border-right: 0; }
+.benchmarkScores span, .benchmarkScores small { color: var(--muted); line-height: 1.5; }
+.benchmarkScores strong { font: 600 30px ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap: anywhere; }
+.benchmarkDashboard h3 { margin-top: 26px; }
+@media (max-width: 800px) {
+  .benchmarkMetadata { grid-template-columns: minmax(0, 1fr); }
+  .benchmarkScores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .benchmarkScores article { border-bottom: 1px solid var(--line); }
+}
+@media (max-width: 480px) {
+  .benchmarkScores { grid-template-columns: minmax(0, 1fr); }
+  .benchmarkScores article { border-right: 0; }
+  .benchmarkScores article:last-child { border-bottom: 0; }
+}

@@ -4,7 +4,8 @@ Status: staged implementation; V04-001 definitions/loading, V04-002 pure evaluat
 isolated runner, V04-004 independent benchmark persistence, V04-005 pure quality aggregation and
 V04-006 optional overall quality routing and V04-007 read-only API/explicit CLI are
 implemented. Stable application version remains 0.3.0; development SQLite schema is 4.
-Quality routing requires an explicit suite path and defaults to disabled; no benchmark Dashboard yet.
+Quality routing requires an explicit suite path and defaults to disabled. V04-008 adds a read-only
+Benchmark Dashboard; code checks pass, while browser interaction/layout acceptance remains pending.
 
 ## Why and user value
 

@@ -1,7 +1,8 @@
 # V0.4 Implementation Tasks
 
 Each task is a focused independently validated commit. V04-001 through V04-007 are implemented;
-V04-008 and later task descriptions remain plans, not completed features.
+V04-008 is implemented with automated checks passing, but browser acceptance is pending (PARTIAL).
+V04-009 remains a plan, not completed work. See DASHBOARD.md for evidence and repeatable acceptance.
 
 | Task | Name | Goal and acceptance gate |
 | --- | --- | --- |

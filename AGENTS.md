@@ -6,7 +6,7 @@ These instructions apply to the entire repository.
 
 ## Project boundaries
 
-- Keep changes within the V0.1 scope described in the README.
+- Follow the approved current version scope and task documents; do not expand scope without approval.
 - Preserve the OpenAI-compatible request and response shape.
 - Never commit API keys, access tokens, or populated `.env` files.
 - Keep provider-specific HTTP details inside `backend/src/modelpilot/providers/`.

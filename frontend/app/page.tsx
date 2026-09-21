@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import BenchmarkDashboard from "../components/benchmark-dashboard";
 
 import {
   fetchHealth,
@@ -224,17 +225,22 @@ export default function Dashboard() {
   const [decisions, setDecisions] = useState<Loadable<RoutingDecision[]>>(loading);
   const [failures, setFailures] = useState<Loadable<RecentFailure[]>>(loading);
   const requestSequence = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
+  const [benchmarkRefresh, setBenchmarkRefresh] = useState(0);
   const apiUrl = process.env.NEXT_PUBLIC_MODELPILOT_API_URL?.replace(/\/$/, "") ?? "";
 
   const load = useCallback(async () => {
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     const sequence = ++requestSequence.current;
     const results = await Promise.allSettled([
-      fetchHealth(apiUrl),
-      fetchSummary(apiUrl),
-      fetchProviderMetrics(apiUrl),
-      fetchRoutingDecisions(apiUrl),
-      fetchRecentFailures(apiUrl),
-      fetchProviderHealth(apiUrl),
+      fetchHealth(apiUrl, controller.signal),
+      fetchSummary(apiUrl, controller.signal),
+      fetchProviderMetrics(apiUrl, controller.signal),
+      fetchRoutingDecisions(apiUrl, controller.signal),
+      fetchRecentFailures(apiUrl, controller.signal),
+      fetchProviderHealth(apiUrl, controller.signal),
     ] as const);
 
     if (sequence !== requestSequence.current) return;
@@ -247,6 +253,7 @@ export default function Dashboard() {
   }, [apiUrl]);
 
   const refresh = useCallback(async () => {
+    setBenchmarkRefresh(value => value + 1);
     setHealth(loading());
     setProviderHealth(loading());
     setSummary(loading());
@@ -260,6 +267,7 @@ export default function Dashboard() {
     void load();
     return () => {
       requestSequence.current += 1;
+      activeRequest.current?.abort();
     };
   }, [load]);
 
@@ -293,7 +301,7 @@ export default function Dashboard() {
         <div className="introActions">
           <p>Operational metrics from completed provider attempts. Costs are estimates, not billing data.</p>
           <button type="button" onClick={() => void refresh()} disabled={loadingAny}>
-            {loadingAny ? "Refreshing…" : "Refresh metrics"}
+            {loadingAny ? "Refreshing…" : "Refresh dashboard"}
           </button>
         </div>
       </section>
@@ -363,6 +371,8 @@ export default function Dashboard() {
           {failures.status === "success" && <FailureList failures={failures.data} />}
         </section>
       </div>
+
+      <BenchmarkDashboard apiUrl={apiUrl} refreshKey={benchmarkRefresh} />
 
       <footer>
         <span>MODEL PILOT / LOCAL CONTROL PLANE</span>

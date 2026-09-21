@@ -14,13 +14,11 @@ use measured latency, reliability, and estimated cost.
 
 ## Version status and features
 
-Current stable version: **0.3.0**, officially published as
-[ModelPilot v0.3.0](https://github.com/WCRR-ART/ModelPilot/releases/tag/v0.3.0).
-
-This working branch targets **v0.4.0 — Benchmark-Driven Quality Routing**. It is not yet published.
-The capabilities below describe this branch, not the older stable release. Local acceptance results
-and remaining gates are tracked in [V0.4 completion](docs/v0.4/COMPLETION.md);
-[v0.4.0 release notes](docs/releases/v0.4.0.md) remain a draft.
+This documentation describes **v0.4.0 — Benchmark-Driven Quality Routing**.
+See [GitHub Releases](https://github.com/WCRR-ART/ModelPilot/releases) for published versions.
+The capabilities below describe V0.4; older releases have their own feature sets.
+Local preparation evidence is recorded in [V0.4 completion](docs/v0.4/COMPLETION.md);
+see [v0.4.0 release notes](docs/releases/v0.4.0.md) for the version's contents and limitations.
 
 ### Gateway
 
@@ -423,7 +421,8 @@ rendering and is not browser acceptance. Browser interactions/layout, real local
 connections, exact commands/counts and evidence are recorded separately in
 [DASHBOARD.md](docs/v0.4/DASHBOARD.md) and [COMPLETION.md](docs/v0.4/COMPLETION.md).
 Actual cloud Provider acceptance is **NOT_RUN**. Synthetic fixture results are not real model quality
-benchmarks. Remote CI for the unpushed release-preparation commit remains **pending**, not passed.
+benchmarks. Check [GitHub Actions](https://github.com/WCRR-ART/ModelPilot/actions) for the exact commit's
+remote CI status; the 14 browser scenarios are a separate local release gate, not a CI browser job.
 
 ## Contributing
 

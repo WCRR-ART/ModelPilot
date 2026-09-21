@@ -12,12 +12,11 @@ ModelPilot 为应用提供一个 OpenAI 兼容的聊天补全入口，并将 Pro
 
 ## 版本状态与功能
 
-当前正式稳定版本为 **0.3.0**，已发布：
-[ModelPilot v0.3.0](https://github.com/WCRR-ART/ModelPilot/releases/tag/v0.3.0)。
-
-当前工作分支目标为 **v0.4.0 — Benchmark-Driven Quality Routing**，尚未发布。
-下文描述本分支能力，不代表旧稳定版已包含这些功能。本地验收结果和剩余门槛见
-[V0.4 完成记录](docs/v0.4/COMPLETION.md)，[v0.4.0 Release Notes](docs/releases/v0.4.0.md) 仍为草稿。
+本文档描述 **v0.4.0 — Benchmark-Driven Quality Routing**。
+已发布版本请查看 [GitHub Releases](https://github.com/WCRR-ART/ModelPilot/releases)。
+下文描述 V0.4 能力，旧版本的功能范围以对应版本为准。本地发布准备证据见
+[V0.4 完成记录](docs/v0.4/COMPLETION.md)，版本内容与限制见
+[v0.4.0 Release Notes](docs/releases/v0.4.0.md)。
 
 ### Gateway
 
@@ -395,7 +394,8 @@ npm audit
 浏览器交互/布局、真实本地前后端/SQLite 完整连接、实际命令、数量和证据分别记录在
 [DASHBOARD.md](docs/v0.4/DASHBOARD.md) 与 [COMPLETION.md](docs/v0.4/COMPLETION.md)。
 真实云端 Provider 验收为 **NOT_RUN**；合成 fixture 成绩不是模型真实质量实测。
-尚未 push 的发布准备提交，其远端 CI 为**待验证**，不能写成已通过。
+远端 CI 请在 [GitHub Actions](https://github.com/WCRR-ART/ModelPilot/actions) 核对对应提交；
+14 组浏览器场景属于单独的本地发布门槛，不是 CI 中的浏览器 job。
 
 ## 贡献
 
